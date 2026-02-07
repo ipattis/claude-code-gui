@@ -1,9 +1,8 @@
-import { IpcMain, BrowserWindow } from 'electron'
+import { IpcMain } from 'electron'
 import { spawn, ChildProcess, execSync } from 'child_process'
 import { homedir } from 'os'
 import { join } from 'path'
 import { existsSync, readFileSync } from 'fs'
-import { net } from 'electron'
 
 interface ClaudeSession {
   id: string
@@ -114,6 +113,52 @@ function generateSessionId(): string {
   return `session-${++sessionCounter}-${Date.now()}`
 }
 
+// Shell-escape an argument for safe interpolation into a shell command string
+function shellEscape(arg: string): string {
+  if (/^[a-zA-Z0-9._\-/=]+$/.test(arg)) return arg
+  return "'" + arg.replace(/'/g, "'\\''") + "'"
+}
+
+// Spawn claude through the user's login shell (same approach as pty-bridge).
+// This ensures shebangs are handled, PATH is loaded from .zprofile/.zshrc,
+// and Node.js (required by claude CLI) is available.
+function spawnClaudeViaShell(
+  claudePath: string,
+  args: string[],
+  options: { cwd?: string; timeout?: number }
+): Promise<{ code: number | null; stdout: string; stderr: string }> {
+  return new Promise((resolve) => {
+    const shell = process.env.SHELL || '/bin/zsh'
+    const cmdParts = [claudePath, ...args].map(shellEscape)
+    const fullCmd = cmdParts.join(' ')
+
+    const proc = spawn(shell, ['-l', '-c', fullCmd], {
+      cwd: options.cwd || process.cwd(),
+      env: {
+        ...process.env,
+        PATH: buildUserPath(),
+      },
+    })
+
+    // Close stdin immediately — prompt is passed via -p flag
+    proc.stdin?.end()
+
+    let stdout = ''
+    let stderr = ''
+    const timeout = options.timeout || 60000
+
+    const timer = setTimeout(() => {
+      proc.kill('SIGTERM')
+      resolve({ code: -1, stdout, stderr: stderr || `Timeout after ${timeout / 1000}s` })
+    }, timeout)
+
+    proc.stdout?.on('data', (d) => { stdout += d.toString() })
+    proc.stderr?.on('data', (d) => { stderr += d.toString() })
+    proc.on('close', (code) => { clearTimeout(timer); resolve({ code, stdout, stderr }) })
+    proc.on('error', (e) => { clearTimeout(timer); resolve({ code: -1, stdout: '', stderr: e.message }) })
+  })
+}
+
 // Read API key from environment or ~/.claude/.env file
 function getAnthropicApiKey(): string | null {
   // 1. Check process env (set by shell or system)
@@ -150,9 +195,10 @@ export function registerCliBridgeHandlers(ipcMain: IpcMain): void {
   // Check if Claude CLI is available
   ipcMain.handle('cli:check', async () => {
     try {
-      const version = execSync(`"${claudePath}" --version 2>&1`, {
+      const shell = process.env.SHELL || '/bin/zsh'
+      const version = execSync(`${shell} -l -c '${shellEscape(claudePath)} --version 2>&1'`, {
         encoding: 'utf-8',
-        env: getSpawnEnv()
+        timeout: 10000,
       }).trim()
       return { available: true, version, path: claudePath }
     } catch {
@@ -227,55 +273,13 @@ export function registerCliBridgeHandlers(ipcMain: IpcMain): void {
       args.push('--model', options.model)
     }
 
-    console.log('[cli:exec] Running:', claudePath, args.join(' '))
-    return new Promise((resolve) => {
-      const spawnEnv = getSpawnEnv()
-      let proc: ReturnType<typeof spawn>
-      try {
-        proc = spawn(claudePath, args, {
-          cwd: options.cwd || process.cwd(),
-          env: spawnEnv,
-        })
-      } catch (e: any) {
-        console.error('[cli:exec] Spawn failed:', e.message)
-        resolve({ code: -1, stdout: '', stderr: `Spawn failed: ${e.message}` })
-        return
-      }
-
-      // Close stdin immediately — prompt is passed via -p flag argument.
-      // Without this, Claude CLI may hang waiting for interactive input
-      // (e.g., tool permission prompts) since stdin pipe stays open.
-      proc.stdin?.end()
-
-      let stdout = ''
-      let stderr = ''
-
-      // Set a manual timeout since spawn timeout option is unreliable
-      const timer = setTimeout(() => {
-        console.log('[cli:exec] Timeout reached, killing process')
-        proc.kill('SIGTERM')
-        resolve({ code: -1, stdout, stderr: stderr || 'Command timed out after 2 minutes' })
-      }, options.timeout || 120000)
-
-      proc.stdout?.on('data', (data) => {
-        stdout += data.toString()
-      })
-      proc.stderr?.on('data', (data) => {
-        stderr += data.toString()
-      })
-
-      proc.on('close', (code) => {
-        clearTimeout(timer)
-        console.log('[cli:exec] Done. code:', code, 'stdout length:', stdout.length, 'stderr length:', stderr.length)
-        resolve({ code, stdout, stderr })
-      })
-
-      proc.on('error', (error) => {
-        clearTimeout(timer)
-        console.error('[cli:exec] Process error:', error.message)
-        resolve({ code: -1, stdout: '', stderr: `Process error: ${error.message}` })
-      })
+    console.log('[cli:exec] Running via login shell:', claudePath, args.length, 'args')
+    const result = await spawnClaudeViaShell(claudePath, args, {
+      cwd: options.cwd,
+      timeout: options.timeout || 120000,
     })
+    console.log('[cli:exec] Done. code:', result.code, 'stdout:', result.stdout.length, 'stderr:', result.stderr.length)
+    return result
   })
 
   // Run a slash command
@@ -288,21 +292,9 @@ export function registerCliBridgeHandlers(ipcMain: IpcMain): void {
       ? `/${options.command} ${options.args}`
       : `/${options.command}`
 
-    return new Promise((resolve) => {
-      const proc = spawn(claudePath, ['-p', fullCommand], {
-        cwd: options.cwd || process.cwd(),
-        env: getSpawnEnv()
-      })
-
-      let stdout = ''
-      let stderr = ''
-
-      proc.stdout.on('data', (data) => { stdout += data.toString() })
-      proc.stderr.on('data', (data) => { stderr += data.toString() })
-
-      proc.on('close', (code) => {
-        resolve({ code, stdout, stderr })
-      })
+    return spawnClaudeViaShell(claudePath, ['-p', fullCommand], {
+      cwd: options.cwd,
+      timeout: 120000,
     })
   })
 
@@ -381,25 +373,13 @@ ${prompt}
       }
     }
 
-    // CLI fallback — slower but works with claude login (Max/Pro subscriptions)
+    // CLI path — works with claude login (Max/Pro/Enterprise subscriptions)
+    // Spawns through login shell so PATH and shebangs resolve correctly
     try {
-      const result = await new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve) => {
-        const args = ['-p', `Rewrite this prompt to be clearer and more specific for an AI coding assistant. Output ONLY the enhanced prompt, nothing else:\n\n${prompt}`, '--output-format', 'text', '--model', 'haiku']
-        const proc = spawn(claudePath, args, {
-          cwd: process.cwd(),
-          env: getSpawnEnv(),
-        })
-        proc.stdin?.end()
-
-        let stdout = ''
-        let stderr = ''
-        const timer = setTimeout(() => { proc.kill('SIGTERM'); resolve({ code: -1, stdout, stderr: 'Timeout' }) }, 30000)
-
-        proc.stdout?.on('data', (d) => { stdout += d.toString() })
-        proc.stderr?.on('data', (d) => { stderr += d.toString() })
-        proc.on('close', (code) => { clearTimeout(timer); resolve({ code, stdout, stderr }) })
-        proc.on('error', (e) => { clearTimeout(timer); resolve({ code: -1, stdout: '', stderr: e.message }) })
-      })
+      const enhancePromptText = `Rewrite this prompt to be clearer and more specific for an AI coding assistant. Output ONLY the enhanced prompt, nothing else:\n\n${prompt}`
+      const result = await spawnClaudeViaShell(claudePath, [
+        '-p', enhancePromptText, '--output-format', 'text', '--model', 'haiku'
+      ], { timeout: 45000 })
 
       if (result.stdout.trim()) {
         return { success: true, enhanced: result.stdout.trim() }
@@ -511,25 +491,11 @@ ${transcript}
       }
     }
 
-    // CLI fallback
+    // CLI path — works with claude login (Max/Pro/Enterprise subscriptions)
     try {
-      const result = await new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve) => {
-        const args = ['-p', systemPrompt, '--output-format', 'text', '--model', 'haiku']
-        const proc = spawn(claudePath, args, {
-          cwd: process.cwd(),
-          env: getSpawnEnv(),
-        })
-        proc.stdin?.end()
-
-        let stdout = ''
-        let stderr = ''
-        const timer = setTimeout(() => { proc.kill('SIGTERM'); resolve({ code: -1, stdout, stderr: 'Timeout' }) }, 60000)
-
-        proc.stdout?.on('data', (d) => { stdout += d.toString() })
-        proc.stderr?.on('data', (d) => { stderr += d.toString() })
-        proc.on('close', (code) => { clearTimeout(timer); resolve({ code, stdout, stderr }) })
-        proc.on('error', (e) => { clearTimeout(timer); resolve({ code: -1, stdout: '', stderr: e.message }) })
-      })
+      const result = await spawnClaudeViaShell(claudePath, [
+        '-p', systemPrompt, '--output-format', 'text', '--model', 'haiku'
+      ], { timeout: 60000 })
 
       if (result.stdout.trim()) {
         return { success: true, summary: result.stdout.trim() }
@@ -543,9 +509,10 @@ ${transcript}
   // Get Claude config info
   ipcMain.handle('cli:get-info', async () => {
     try {
-      const result = execSync(`"${claudePath}" --version 2>&1`, {
+      const shell = process.env.SHELL || '/bin/zsh'
+      const result = execSync(`${shell} -l -c '${shellEscape(claudePath)} --version 2>&1'`, {
         encoding: 'utf-8',
-        env: getSpawnEnv()
+        timeout: 10000,
       }).trim()
       return {
         version: result,

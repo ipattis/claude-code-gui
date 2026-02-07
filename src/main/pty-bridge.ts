@@ -32,6 +32,23 @@ function shellEscape(arg: string): string {
   return "'" + arg.replace(/'/g, "'\\''") + "'"
 }
 
+// Cached login shell PATH
+let _cachedLoginPath: string | null = null
+
+function getLoginShellPath(): string {
+  if (_cachedLoginPath !== null) return _cachedLoginPath
+  try {
+    const shell = process.env.SHELL || '/bin/zsh'
+    const result = execSync(`${shell} -ilc 'echo $PATH'`, {
+      encoding: 'utf-8',
+      timeout: 5000,
+    }).trim()
+    if (result) { _cachedLoginPath = result; return result }
+  } catch { /* ignore */ }
+  _cachedLoginPath = ''
+  return ''
+}
+
 function buildUserPath(): string {
   const home = homedir()
   const extraPaths = [
@@ -54,8 +71,9 @@ function buildUserPath(): string {
     } catch { /* ignore */ }
   }
 
+  const loginPath = getLoginShellPath()
   const systemPath = process.env.PATH || '/usr/bin:/bin'
-  return [...extraPaths, systemPath].join(':')
+  return [...extraPaths, loginPath, systemPath].filter(Boolean).join(':')
 }
 
 function getClaudePath(): string {

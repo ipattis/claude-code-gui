@@ -1,241 +1,240 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import {
-  Plug, Download, Trash2, Search, Star, Package, Plus,
-  Server, Globe, Database, MessageSquare, Code, Cloud,
-  Zap, Shield, GitBranch, ExternalLink, Check, Terminal
+  Plug, Package, Star, Code, Globe, MessageSquare, Zap,
+  GitBranch, Check, Copy, Terminal, RefreshCw, Plus,
+  Trash2, ExternalLink, ChevronDown, ChevronRight,
+  Shield, Search, Eye, EyeOff, Store, BookOpen, AlertTriangle,
+  Cpu, Server
 } from 'lucide-react'
 import { cn, getApi } from '../lib/utils'
 import { useAppStore } from '../stores/app-store'
 import { EmptyState } from '../components/shared/EmptyState'
 import { SearchInput } from '../components/shared/SearchInput'
 import { Modal } from '../components/shared/Modal'
-import type { McpServerConfig } from '../types/config'
 
-type Category = 'all' | 'official' | 'database' | 'search' | 'communication' | 'development' | 'cloud' | 'productivity' | 'ai'
+// ── Plugin Catalog (Official Marketplace) ──────────────────
 
-interface MarketplaceServer {
+type PluginCategory = 'all' | 'lsp' | 'integrations' | 'workflows' | 'styles'
+
+interface CatalogPlugin {
+  name: string
+  marketplace: string
+  label: string
+  desc: string
+  category: PluginCategory
+  components: string[]  // What the plugin bundles
+  requires?: string     // Binary or service requirement
+}
+
+const CATEGORIES: { id: PluginCategory; label: string; icon: React.ReactNode }[] = [
+  { id: 'all', label: 'All Plugins', icon: <Package size={14} /> },
+  { id: 'lsp', label: 'Code Intelligence', icon: <Cpu size={14} /> },
+  { id: 'integrations', label: 'Integrations', icon: <Globe size={14} /> },
+  { id: 'workflows', label: 'Workflows', icon: <Zap size={14} /> },
+  { id: 'styles', label: 'Output Styles', icon: <Eye size={14} /> },
+]
+
+const PLUGIN_CATALOG: CatalogPlugin[] = [
+  // Code Intelligence (LSP)
+  { name: 'pyright-lsp', marketplace: 'claude-plugins-official', label: 'Python (Pyright)', desc: 'Real-time Python code analysis, type checking, and navigation', category: 'lsp', components: ['LSP Server'], requires: 'pyright-langserver' },
+  { name: 'typescript-lsp', marketplace: 'claude-plugins-official', label: 'TypeScript', desc: 'TypeScript/JavaScript code intelligence and navigation', category: 'lsp', components: ['LSP Server'], requires: 'typescript-language-server' },
+  { name: 'rust-analyzer-lsp', marketplace: 'claude-plugins-official', label: 'Rust', desc: 'Rust code analysis, completion, and refactoring', category: 'lsp', components: ['LSP Server'], requires: 'rust-analyzer' },
+  { name: 'gopls-lsp', marketplace: 'claude-plugins-official', label: 'Go', desc: 'Go code intelligence powered by gopls', category: 'lsp', components: ['LSP Server'], requires: 'gopls' },
+  { name: 'jdtls-lsp', marketplace: 'claude-plugins-official', label: 'Java', desc: 'Java code intelligence via Eclipse JDT Language Server', category: 'lsp', components: ['LSP Server'], requires: 'jdtls' },
+  { name: 'clangd-lsp', marketplace: 'claude-plugins-official', label: 'C/C++', desc: 'C and C++ code intelligence via clangd', category: 'lsp', components: ['LSP Server'], requires: 'clangd' },
+  { name: 'csharp-lsp', marketplace: 'claude-plugins-official', label: 'C#', desc: 'C# code intelligence and analysis', category: 'lsp', components: ['LSP Server'], requires: 'csharp-ls' },
+  { name: 'php-lsp', marketplace: 'claude-plugins-official', label: 'PHP', desc: 'PHP code intelligence via Intelephense', category: 'lsp', components: ['LSP Server'], requires: 'intelephense' },
+  { name: 'swift-lsp', marketplace: 'claude-plugins-official', label: 'Swift', desc: 'Swift code intelligence via SourceKit-LSP', category: 'lsp', components: ['LSP Server'], requires: 'sourcekit-lsp' },
+  { name: 'kotlin-lsp', marketplace: 'claude-plugins-official', label: 'Kotlin', desc: 'Kotlin code intelligence and navigation', category: 'lsp', components: ['LSP Server'], requires: 'kotlin-language-server' },
+  { name: 'lua-lsp', marketplace: 'claude-plugins-official', label: 'Lua', desc: 'Lua code intelligence and analysis', category: 'lsp', components: ['LSP Server'], requires: 'lua-language-server' },
+
+  // External Integrations
+  { name: 'github', marketplace: 'claude-plugins-official', label: 'GitHub', desc: 'Pull requests, issues, repos, code search, and CI/CD', category: 'integrations', components: ['MCP Server', 'Commands'] },
+  { name: 'gitlab', marketplace: 'claude-plugins-official', label: 'GitLab', desc: 'Merge requests, issues, and CI pipelines', category: 'integrations', components: ['MCP Server'] },
+  { name: 'atlassian', marketplace: 'claude-plugins-official', label: 'Atlassian', desc: 'Jira issues, Confluence docs, and project management', category: 'integrations', components: ['MCP Server'] },
+  { name: 'asana', marketplace: 'claude-plugins-official', label: 'Asana', desc: 'Task and project management', category: 'integrations', components: ['MCP Server'] },
+  { name: 'linear', marketplace: 'claude-plugins-official', label: 'Linear', desc: 'Issues, projects, and team workflows', category: 'integrations', components: ['MCP Server'] },
+  { name: 'notion', marketplace: 'claude-plugins-official', label: 'Notion', desc: 'Pages, databases, and workspace management', category: 'integrations', components: ['MCP Server'] },
+  { name: 'figma', marketplace: 'claude-plugins-official', label: 'Figma', desc: 'Design files, components, and prototypes', category: 'integrations', components: ['MCP Server'] },
+  { name: 'vercel', marketplace: 'claude-plugins-official', label: 'Vercel', desc: 'Deployments, domains, and serverless functions', category: 'integrations', components: ['MCP Server'] },
+  { name: 'firebase', marketplace: 'claude-plugins-official', label: 'Firebase', desc: 'Auth, Firestore, hosting, and cloud functions', category: 'integrations', components: ['MCP Server'] },
+  { name: 'supabase', marketplace: 'claude-plugins-official', label: 'Supabase', desc: 'Postgres, auth, storage, and edge functions', category: 'integrations', components: ['MCP Server'] },
+  { name: 'slack', marketplace: 'claude-plugins-official', label: 'Slack', desc: 'Messages, channels, and workspace management', category: 'integrations', components: ['MCP Server'] },
+  { name: 'sentry', marketplace: 'claude-plugins-official', label: 'Sentry', desc: 'Error tracking, issue management, and performance', category: 'integrations', components: ['MCP Server'] },
+
+  // Development Workflows
+  { name: 'commit-commands', marketplace: 'claude-plugins-official', label: 'Commit Commands', desc: 'Git commit workflows — commit, push, PR creation', category: 'workflows', components: ['Commands', 'Hooks'] },
+  { name: 'pr-review-toolkit', marketplace: 'claude-plugins-official', label: 'PR Review Toolkit', desc: 'Comprehensive PR review with 6 specialized agents', category: 'workflows', components: ['Agents', 'Commands', 'Skills'] },
+  { name: 'code-review', marketplace: 'claude-plugins-official', label: 'Code Review', desc: 'Automated PR review with 5 parallel agents', category: 'workflows', components: ['Agents', 'Commands'] },
+  { name: 'agent-sdk-dev', marketplace: 'claude-plugins-official', label: 'Agent SDK Dev', desc: 'Agent SDK development toolkit', category: 'workflows', components: ['Skills', 'Commands'] },
+  { name: 'plugin-dev', marketplace: 'claude-plugins-official', label: 'Plugin Dev', desc: 'Plugin development toolkit with 8-phase guided workflow', category: 'workflows', components: ['Skills', 'Commands', 'Agents'] },
+  { name: 'feature-dev', marketplace: 'claude-plugins-official', label: 'Feature Dev', desc: '7-phase feature development workflow', category: 'workflows', components: ['Skills', 'Commands'] },
+
+  // Output Styles
+  { name: 'explanatory-output-style', marketplace: 'claude-plugins-official', label: 'Explanatory Style', desc: 'Responses include educational insights and explanations', category: 'styles', components: ['Skills'] },
+  { name: 'learning-output-style', marketplace: 'claude-plugins-official', label: 'Learning Style', desc: 'Interactive learning mode with guided exploration', category: 'styles', components: ['Skills'] },
+]
+
+// ── Component badges ──
+
+const COMPONENT_COLORS: Record<string, string> = {
+  'Commands': 'bg-accent-blue/10 text-accent-blue',
+  'Agents': 'bg-accent-purple/10 text-accent-purple',
+  'Skills': 'bg-accent-green/10 text-accent-green',
+  'Hooks': 'bg-accent-orange/10 text-accent-orange',
+  'MCP Server': 'bg-accent-cyan/10 text-accent-cyan',
+  'LSP Server': 'bg-accent-yellow/10 text-accent-yellow',
+}
+
+// ── Known Marketplaces ──
+
+interface KnownMarketplace {
   name: string
   label: string
   desc: string
-  category: Category
-  type: 'stdio' | 'http' | 'sse'
-  command: string
-  args: string[]
-  envKeys?: string[]
-  envHints?: Record<string, string>
+  source: string
+  isDefault?: boolean
 }
 
-const CATEGORIES: { id: Category; label: string; icon: React.ReactNode }[] = [
-  { id: 'all', label: 'All', icon: <Package size={14} /> },
-  { id: 'official', label: 'Official', icon: <Star size={14} /> },
-  { id: 'search', label: 'Search & Web', icon: <Globe size={14} /> },
-  { id: 'database', label: 'Database', icon: <Database size={14} /> },
-  { id: 'communication', label: 'Communication', icon: <MessageSquare size={14} /> },
-  { id: 'development', label: 'Development', icon: <Code size={14} /> },
-  { id: 'cloud', label: 'Cloud & Infra', icon: <Cloud size={14} /> },
-  { id: 'productivity', label: 'Productivity', icon: <Zap size={14} /> },
-  { id: 'ai', label: 'AI & ML', icon: <Shield size={14} /> },
+const KNOWN_MARKETPLACES: KnownMarketplace[] = [
+  { name: 'claude-plugins-official', label: 'Official (Anthropic)', desc: 'Official plugin registry maintained by Anthropic', source: 'anthropics/claude-plugins-official', isDefault: true },
+  { name: 'anthropics-claude-code', label: 'Claude Code Demo', desc: 'Demo plugins and examples from Anthropic', source: 'anthropics/claude-code' },
 ]
 
-const MARKETPLACE: MarketplaceServer[] = [
-  // Official @modelcontextprotocol servers
-  { name: 'github', label: 'GitHub', desc: 'Pull requests, issues, repos, and code search', category: 'official', type: 'stdio', command: 'npx', args: ['-y', '@modelcontextprotocol/server-github'], envKeys: ['GITHUB_TOKEN'], envHints: { GITHUB_TOKEN: 'ghp_...' } },
-  { name: 'filesystem', label: 'Filesystem', desc: 'Read, write, and manage local files and directories', category: 'official', type: 'stdio', command: 'npx', args: ['-y', '@modelcontextprotocol/server-filesystem', '/path/to/dir'] },
-  { name: 'brave-search', label: 'Brave Search', desc: 'Web search powered by Brave Search API', category: 'official', type: 'stdio', command: 'npx', args: ['-y', '@modelcontextprotocol/server-brave-search'], envKeys: ['BRAVE_API_KEY'], envHints: { BRAVE_API_KEY: 'BSA...' } },
-  { name: 'memory', label: 'Memory', desc: 'Persistent knowledge graph for long-term memory', category: 'official', type: 'stdio', command: 'npx', args: ['-y', '@modelcontextprotocol/server-memory'] },
-  { name: 'postgres', label: 'PostgreSQL', desc: 'Query and manage PostgreSQL databases', category: 'official', type: 'stdio', command: 'npx', args: ['-y', '@modelcontextprotocol/server-postgres'], envKeys: ['POSTGRES_URL'], envHints: { POSTGRES_URL: 'postgresql://user:pass@host:5432/db' } },
-  { name: 'slack', label: 'Slack', desc: 'Send messages, read channels, manage Slack workspace', category: 'official', type: 'stdio', command: 'npx', args: ['-y', '@modelcontextprotocol/server-slack'], envKeys: ['SLACK_BOT_TOKEN'], envHints: { SLACK_BOT_TOKEN: 'xoxb-...' } },
-  { name: 'puppeteer', label: 'Puppeteer', desc: 'Browser automation, screenshots, and web scraping', category: 'official', type: 'stdio', command: 'npx', args: ['-y', '@modelcontextprotocol/server-puppeteer'] },
-  { name: 'sequential-thinking', label: 'Sequential Thinking', desc: 'Step-by-step reasoning and task breakdown', category: 'official', type: 'stdio', command: 'npx', args: ['-y', '@modelcontextprotocol/server-sequential-thinking'] },
-  { name: 'fetch', label: 'Fetch', desc: 'Make HTTP requests and fetch web content', category: 'official', type: 'stdio', command: 'npx', args: ['-y', '@modelcontextprotocol/server-fetch'] },
-  { name: 'sqlite', label: 'SQLite', desc: 'Query and manage SQLite databases', category: 'official', type: 'stdio', command: 'npx', args: ['-y', '@modelcontextprotocol/server-sqlite'] },
-  { name: 'google-maps', label: 'Google Maps', desc: 'Directions, geocoding, and place search', category: 'official', type: 'stdio', command: 'npx', args: ['-y', '@modelcontextprotocol/server-google-maps'], envKeys: ['GOOGLE_MAPS_API_KEY'], envHints: { GOOGLE_MAPS_API_KEY: 'AIza...' } },
-  { name: 'git', label: 'Git', desc: 'Git operations — clone, diff, log, blame, and more', category: 'official', type: 'stdio', command: 'npx', args: ['-y', '@modelcontextprotocol/server-git'] },
-  { name: 'google-drive', label: 'Google Drive', desc: 'Search, read, and manage Google Drive files', category: 'official', type: 'stdio', command: 'npx', args: ['-y', '@modelcontextprotocol/server-gdrive'] },
-  { name: 'sentry', label: 'Sentry', desc: 'Error tracking, issue management, and performance', category: 'official', type: 'stdio', command: 'npx', args: ['-y', '@modelcontextprotocol/server-sentry'], envKeys: ['SENTRY_AUTH_TOKEN'], envHints: { SENTRY_AUTH_TOKEN: 'sntrys_...' } },
-  { name: 'everart', label: 'EverArt', desc: 'AI image generation and art creation', category: 'official', type: 'stdio', command: 'npx', args: ['-y', '@modelcontextprotocol/server-everart'], envKeys: ['EVERART_API_KEY'] },
-  { name: 'everything', label: 'Everything', desc: 'Fast file and folder search across your system', category: 'official', type: 'stdio', command: 'npx', args: ['-y', '@modelcontextprotocol/server-everything'] },
-
-  // Search & Web
-  { name: 'exa', label: 'Exa Search', desc: 'AI-powered semantic search engine', category: 'search', type: 'stdio', command: 'npx', args: ['-y', '@exa-labs/mcp-server'], envKeys: ['EXA_API_KEY'] },
-  { name: 'tavily', label: 'Tavily Search', desc: 'AI-optimized search API for research', category: 'search', type: 'stdio', command: 'npx', args: ['-y', '@tavily/mcp-server'], envKeys: ['TAVILY_API_KEY'] },
-  { name: 'firecrawl', label: 'Firecrawl', desc: 'Web scraping, crawling, and content extraction', category: 'search', type: 'stdio', command: 'npx', args: ['-y', '@anthropic/firecrawl-mcp-server'], envKeys: ['FIRECRAWL_API_KEY'] },
-
-  // Database
-  { name: 'redis', label: 'Redis / Upstash', desc: 'Redis cache, vector DB, and QStash messaging', category: 'database', type: 'stdio', command: 'npx', args: ['-y', '@upstash/mcp-server'], envKeys: ['UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN'] },
-  { name: 'supabase', label: 'Supabase', desc: 'Postgres, auth, storage, and edge functions', category: 'database', type: 'stdio', command: 'npx', args: ['-y', '@supabase/mcp-server'], envKeys: ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY'] },
-  { name: 'mongodb', label: 'MongoDB', desc: 'MongoDB database operations and queries', category: 'database', type: 'stdio', command: 'npx', args: ['-y', '@anthropic/mongodb-mcp-server'], envKeys: ['MONGODB_URI'] },
-  { name: 'neon', label: 'Neon', desc: 'Serverless Postgres — branches, queries, and management', category: 'database', type: 'stdio', command: 'npx', args: ['-y', '@anthropic/neon-mcp-server'], envKeys: ['NEON_API_KEY'] },
-
-  // Communication
-  { name: 'discord', label: 'Discord', desc: 'Send messages, manage channels and servers', category: 'communication', type: 'stdio', command: 'npx', args: ['-y', '@anthropic/discord-mcp-server'], envKeys: ['DISCORD_BOT_TOKEN'] },
-  { name: 'linear', label: 'Linear', desc: 'Issues, projects, and team workflows', category: 'communication', type: 'stdio', command: 'npx', args: ['-y', '@anthropic/linear-mcp-server'], envKeys: ['LINEAR_API_KEY'] },
-  { name: 'notion', label: 'Notion', desc: 'Pages, databases, and workspace management', category: 'communication', type: 'stdio', command: 'npx', args: ['-y', '@notionhq/notion-mcp-server'], envKeys: ['NOTION_API_KEY'] },
-
-  // Development
-  { name: 'playwright', label: 'Playwright', desc: 'Browser testing and end-to-end automation', category: 'development', type: 'stdio', command: 'npx', args: ['-y', '@playwright/mcp'] },
-  { name: 'context7', label: 'Context7', desc: 'Up-to-date library documentation and code examples', category: 'development', type: 'stdio', command: 'npx', args: ['-y', '@anthropic/context7-mcp-server'] },
-  { name: 'docker', label: 'Docker', desc: 'Container management, images, and compose', category: 'development', type: 'stdio', command: 'npx', args: ['-y', '@anthropic/docker-mcp-server'] },
-  { name: 'npm-search', label: 'NPM Search', desc: 'Search npm registry for packages and metadata', category: 'development', type: 'stdio', command: 'npx', args: ['-y', '@anthropic/npm-mcp-server'] },
-
-  // Cloud & Infrastructure
-  { name: 'cloudflare', label: 'Cloudflare', desc: 'Workers, KV, R2, and DNS management', category: 'cloud', type: 'stdio', command: 'npx', args: ['-y', '@cloudflare/mcp-server-cloudflare'], envKeys: ['CLOUDFLARE_API_TOKEN'] },
-  { name: 'aws', label: 'AWS', desc: 'S3, Lambda, EC2 and other AWS services', category: 'cloud', type: 'stdio', command: 'npx', args: ['-y', '@anthropic/aws-mcp-server'], envKeys: ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY'] },
-  { name: 'vercel', label: 'Vercel', desc: 'Deployments, domains, and serverless functions', category: 'cloud', type: 'stdio', command: 'npx', args: ['-y', '@anthropic/vercel-mcp-server'], envKeys: ['VERCEL_TOKEN'] },
-
-  // Productivity
-  { name: 'obsidian', label: 'Obsidian', desc: 'Read and write notes in Obsidian vaults', category: 'productivity', type: 'stdio', command: 'npx', args: ['-y', '@anthropic/obsidian-mcp-server'] },
-  { name: 'todoist', label: 'Todoist', desc: 'Task and project management', category: 'productivity', type: 'stdio', command: 'npx', args: ['-y', '@anthropic/todoist-mcp-server'], envKeys: ['TODOIST_API_TOKEN'] },
-  { name: 'google-calendar', label: 'Google Calendar', desc: 'Events, scheduling, and calendar management', category: 'productivity', type: 'stdio', command: 'npx', args: ['-y', '@anthropic/google-calendar-mcp-server'] },
-
-  // AI & ML
-  { name: 'stability-ai', label: 'Stability AI', desc: 'Image generation with Stable Diffusion', category: 'ai', type: 'stdio', command: 'npx', args: ['-y', '@anthropic/stability-mcp-server'], envKeys: ['STABILITY_API_KEY'] },
-  { name: 'huggingface', label: 'Hugging Face', desc: 'Models, datasets, and inference API', category: 'ai', type: 'stdio', command: 'npx', args: ['-y', '@anthropic/huggingface-mcp-server'], envKeys: ['HF_TOKEN'] },
-  { name: 'replicate', label: 'Replicate', desc: 'Run ML models in the cloud', category: 'ai', type: 'stdio', command: 'npx', args: ['-y', '@anthropic/replicate-mcp-server'], envKeys: ['REPLICATE_API_TOKEN'] },
-]
+// ── Main Component ──────────────────────────────────────────
 
 export function PluginsPage() {
   const { addActivity, currentProjectDir } = useAppStore()
-  const [activeTab, setActiveTab] = useState<'installed' | 'marketplace'>('marketplace')
+  const [activeTab, setActiveTab] = useState<'discover' | 'installed' | 'marketplaces' | 'guide'>('discover')
   const [search, setSearch] = useState('')
-  const [category, setCategory] = useState<Category>('all')
-  const [installedServers, setInstalledServers] = useState<Record<string, McpServerConfig>>({})
+  const [category, setCategory] = useState<PluginCategory>('all')
+  const [enabledPlugins, setEnabledPlugins] = useState<Record<string, boolean>>({})
+  const [marketplaces, setMarketplaces] = useState<Record<string, any>>({})
   const [loading, setLoading] = useState(true)
-  const [installing, setInstalling] = useState<string | null>(null)
-  const [showCustom, setShowCustom] = useState(false)
-  const [customTab, setCustomTab] = useState<'npx' | 'url'>('npx')
-  const [customName, setCustomName] = useState('')
-  const [customPackage, setCustomPackage] = useState('')
-  const [customUrl, setCustomUrl] = useState('')
-  const [customEnv, setCustomEnv] = useState('')
-  const [showEnvModal, setShowEnvModal] = useState(false)
-  const [envTarget, setEnvTarget] = useState<MarketplaceServer | null>(null)
-  const [envValues, setEnvValues] = useState<Record<string, string>>({})
+  const [copied, setCopied] = useState<string | null>(null)
+  const [settingsScope, setSettingsScope] = useState<'user' | 'project'>('user')
 
-  const loadInstalled = useCallback(async () => {
+  // Add marketplace modal
+  const [showAddMarketplace, setShowAddMarketplace] = useState(false)
+  const [newMpName, setNewMpName] = useState('')
+  const [newMpSource, setNewMpSource] = useState('')
+  const [newMpType, setNewMpType] = useState<'github' | 'url' | 'local'>('github')
+
+  const loadSettings = useCallback(async () => {
     const api = getApi()
     if (!api) { setLoading(false); return }
     try {
-      const servers = await api.config.getMcpServers('user')
-      setInstalledServers(servers || {})
+      const result = await api.config.getSettings(settingsScope, currentProjectDir)
+      const data = result?.data || {}
+      setEnabledPlugins(data.enabledPlugins || {})
+      setMarketplaces(data.extraKnownMarketplaces || {})
     } catch { /* ignore */ }
     setLoading(false)
-  }, [])
+  }, [settingsScope, currentProjectDir])
 
-  useEffect(() => { loadInstalled() }, [loadInstalled])
+  useEffect(() => { loadSettings() }, [loadSettings])
 
-  const isInstalled = (name: string) => Object.keys(installedServers).includes(name)
-
-  const handleInstall = async (server: MarketplaceServer) => {
-    // If server needs env keys, show env modal first
-    if (server.envKeys && server.envKeys.length > 0 && !isInstalled(server.name)) {
-      setEnvTarget(server)
-      const initial: Record<string, string> = {}
-      server.envKeys.forEach(k => { initial[k] = '' })
-      setEnvValues(initial)
-      setShowEnvModal(true)
-      return
-    }
-
-    await doInstall(server, {})
-  }
-
-  const doInstall = async (server: MarketplaceServer, env: Record<string, string>) => {
+  // Save enabledPlugins back to settings
+  const savePluginState = async (plugins: Record<string, boolean>) => {
     const api = getApi()
     if (!api) return
+    const result = await api.config.getSettings(settingsScope, currentProjectDir)
+    const data = result?.data || {}
+    data.enabledPlugins = plugins
+    await api.config.saveSettings(settingsScope, data, currentProjectDir)
+    setEnabledPlugins(plugins)
+  }
 
-    setInstalling(server.name)
-    const config: McpServerConfig = {
-      type: server.type,
-      command: server.command,
-      args: [...server.args],
-    }
-    if (Object.keys(env).length > 0) {
-      // Only include non-empty env values
-      const filtered: Record<string, string> = {}
-      Object.entries(env).forEach(([k, v]) => { if (v.trim()) filtered[k] = v.trim() })
-      if (Object.keys(filtered).length > 0) config.env = filtered
-    }
+  // Save marketplaces back to settings
+  const saveMarketplaces = async (mps: Record<string, any>) => {
+    const api = getApi()
+    if (!api) return
+    const result = await api.config.getSettings(settingsScope, currentProjectDir)
+    const data = result?.data || {}
+    data.extraKnownMarketplaces = mps
+    await api.config.saveSettings(settingsScope, data, currentProjectDir)
+    setMarketplaces(mps)
+  }
 
-    const result = await api.config.saveMcpServer({
-      name: server.name,
-      config,
-      scope: 'user',
-      projectDir: currentProjectDir,
+  const togglePlugin = async (key: string) => {
+    const updated = { ...enabledPlugins }
+    updated[key] = !updated[key]
+    await savePluginState(updated)
+    addActivity({
+      type: 'config',
+      message: `${updated[key] ? 'Enabled' : 'Disabled'} plugin: ${key}`,
+      status: 'success'
     })
-
-    if (result.success) {
-      addActivity({ type: 'config', message: `Installed MCP server: ${server.label}`, status: 'success' })
-      await loadInstalled()
-    }
-    setInstalling(null)
   }
 
-  const handleUninstall = async (name: string) => {
-    const api = getApi()
-    if (!api) return
-    const result = await api.config.deleteMcpServer(name, 'user', currentProjectDir)
-    if (result.success) {
-      addActivity({ type: 'config', message: `Removed MCP server: ${name}`, status: 'success' })
-      await loadInstalled()
-    }
+  const removePlugin = async (key: string) => {
+    const updated = { ...enabledPlugins }
+    delete updated[key]
+    await savePluginState(updated)
+    addActivity({ type: 'config', message: `Removed plugin: ${key}`, status: 'success' })
   }
 
-  const handleCustomInstall = async () => {
-    const api = getApi()
-    if (!api) return
+  const copyCommand = (cmd: string, label: string) => {
+    navigator.clipboard.writeText(cmd)
+    setCopied(label)
+    setTimeout(() => setCopied(null), 2000)
+  }
 
-    const name = customName.trim().replace(/[^a-z0-9-]/g, '')
-    if (!name) return
+  const installPlugin = async (plugin: CatalogPlugin) => {
+    const key = `${plugin.name}@${plugin.marketplace}`
+    const updated = { ...enabledPlugins, [key]: true }
+    await savePluginState(updated)
+    addActivity({ type: 'config', message: `Enabled plugin: ${plugin.label}`, status: 'success' })
+  }
 
-    let config: McpServerConfig
+  const isPluginEnabled = (plugin: CatalogPlugin) => {
+    const key = `${plugin.name}@${plugin.marketplace}`
+    return enabledPlugins[key] === true
+  }
 
-    if (customTab === 'npx') {
-      const pkg = customPackage.trim()
-      if (!pkg) return
-      config = {
-        type: 'stdio',
-        command: 'npx',
-        args: ['-y', pkg],
-      }
+  const isPluginInstalled = (plugin: CatalogPlugin) => {
+    const key = `${plugin.name}@${plugin.marketplace}`
+    return key in enabledPlugins
+  }
+
+  const handleAddMarketplace = async () => {
+    if (!newMpName.trim() || !newMpSource.trim()) return
+    const name = newMpName.trim().replace(/[^a-z0-9-]/g, '')
+    let source: any
+    if (newMpType === 'github') {
+      source = { source: 'github', repo: newMpSource.trim() }
+    } else if (newMpType === 'url') {
+      source = { source: 'url', url: newMpSource.trim() }
     } else {
-      const url = customUrl.trim()
-      if (!url) return
-      config = {
-        type: url.includes('/sse') ? 'sse' : 'http',
-        url,
-      }
+      source = newMpSource.trim()
     }
-
-    if (customEnv.trim()) {
-      try { config.env = JSON.parse(customEnv) } catch { /* ignore bad JSON */ }
-    }
-
-    const result = await api.config.saveMcpServer({
-      name,
-      config,
-      scope: 'user',
-      projectDir: currentProjectDir,
-    })
-
-    if (result.success) {
-      addActivity({ type: 'config', message: `Installed custom MCP server: ${name}`, status: 'success' })
-      setShowCustom(false)
-      setCustomName('')
-      setCustomPackage('')
-      setCustomUrl('')
-      setCustomEnv('')
-      await loadInstalled()
-    }
+    const updated = { ...marketplaces, [name]: { source } }
+    await saveMarketplaces(updated)
+    addActivity({ type: 'config', message: `Added marketplace: ${name}`, status: 'success' })
+    setShowAddMarketplace(false)
+    setNewMpName('')
+    setNewMpSource('')
   }
 
-  const filtered = MARKETPLACE.filter(s => {
-    const matchesCategory = category === 'all' || s.category === category
-    const matchesSearch = !search || s.label.toLowerCase().includes(search.toLowerCase()) || s.desc.toLowerCase().includes(search.toLowerCase()) || s.name.includes(search.toLowerCase())
+  const removeMarketplace = async (name: string) => {
+    const updated = { ...marketplaces }
+    delete updated[name]
+    await saveMarketplaces(updated)
+    addActivity({ type: 'config', message: `Removed marketplace: ${name}`, status: 'success' })
+  }
+
+  // Filtered catalog
+  const filteredCatalog = PLUGIN_CATALOG.filter(p => {
+    const matchesCategory = category === 'all' || p.category === category
+    const matchesSearch = !search ||
+      p.label.toLowerCase().includes(search.toLowerCase()) ||
+      p.desc.toLowerCase().includes(search.toLowerCase()) ||
+      p.name.toLowerCase().includes(search.toLowerCase())
     return matchesCategory && matchesSearch
   })
 
-  const installedEntries = Object.entries(installedServers)
+  const installedEntries = Object.entries(enabledPlugins)
+  const marketplaceEntries = Object.entries(marketplaces)
 
   return (
     <div className="flex flex-col h-full">
@@ -243,24 +242,39 @@ export function PluginsPage() {
       <div className="flex items-center justify-between px-6 py-4 border-b border-border">
         <div className="flex items-center gap-3">
           <div className="flex gap-1">
-            <button onClick={() => setActiveTab('marketplace')} className={cn('px-3 py-1.5 rounded-lg text-xs', activeTab === 'marketplace' ? 'bg-accent-orange/10 text-accent-orange' : 'text-text-muted hover:bg-bg-tertiary')}>
-              Marketplace
-            </button>
-            <button onClick={() => setActiveTab('installed')} className={cn('px-3 py-1.5 rounded-lg text-xs', activeTab === 'installed' ? 'bg-accent-orange/10 text-accent-orange' : 'text-text-muted hover:bg-bg-tertiary')}>
-              Installed ({installedEntries.length})
-            </button>
+            {(['discover', 'installed', 'marketplaces', 'guide'] as const).map(tab => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={cn(
+                  'px-3 py-1.5 rounded-lg text-xs capitalize',
+                  activeTab === tab ? 'bg-accent-orange/10 text-accent-orange font-medium' : 'text-text-muted hover:bg-bg-tertiary'
+                )}
+              >
+                {tab === 'installed' ? `Installed (${installedEntries.length})` :
+                 tab === 'marketplaces' ? `Marketplaces (${marketplaceEntries.length + 1})` :
+                 tab}
+              </button>
+            ))}
           </div>
-          {activeTab === 'marketplace' && (
-            <SearchInput value={search} onChange={setSearch} placeholder="Search servers..." className="w-64" />
+          {activeTab === 'discover' && (
+            <SearchInput value={search} onChange={setSearch} placeholder="Search plugins..." className="w-64" />
           )}
         </div>
-        <button onClick={() => { setShowCustom(true); setCustomTab('npx'); setCustomName(''); setCustomPackage(''); setCustomUrl(''); setCustomEnv('') }} className="btn-primary text-sm">
-          <Plus size={16} /> Add Custom Source
-        </button>
+
+        <div className="flex items-center gap-2">
+          <div className="flex gap-1 p-0.5 bg-bg-tertiary rounded-lg">
+            <button onClick={() => setSettingsScope('user')} className={cn('px-2 py-1 rounded text-[10px]', settingsScope === 'user' ? 'bg-bg-card text-text-primary shadow-sm' : 'text-text-muted')}>User</button>
+            <button onClick={() => setSettingsScope('project')} className={cn('px-2 py-1 rounded text-[10px]', settingsScope === 'project' ? 'bg-bg-card text-text-primary shadow-sm' : 'text-text-muted')}>Project</button>
+          </div>
+          <button onClick={loadSettings} className="btn-ghost text-xs">
+            <RefreshCw size={14} />
+          </button>
+        </div>
       </div>
 
-      {/* Category filter */}
-      {activeTab === 'marketplace' && (
+      {/* Category filter for Discover tab */}
+      {activeTab === 'discover' && (
         <div className="flex items-center gap-1.5 px-6 py-3 border-b border-border overflow-x-auto">
           {CATEGORIES.map(c => (
             <button
@@ -282,62 +296,158 @@ export function PluginsPage() {
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-6">
-        {activeTab === 'marketplace' ? (
-          filtered.length === 0 ? (
+        {/* ── DISCOVER TAB ── */}
+        {activeTab === 'discover' && (
+          filteredCatalog.length === 0 ? (
             <EmptyState
               icon={<Package size={24} />}
-              title="No Matching Servers"
+              title="No Matching Plugins"
               description="Try a different search or category filter."
             />
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filtered.map(server => {
-                const installed = isInstalled(server.name)
-                const isInstalling = installing === server.name
+              {filteredCatalog.map(plugin => {
+                const installed = isPluginInstalled(plugin)
+                const enabled = isPluginEnabled(plugin)
+                const installCmd = `/plugin install ${plugin.name}@${plugin.marketplace}`
                 return (
-                  <div key={server.name} className="card-hover">
+                  <div key={plugin.name} className="card-hover">
                     <div className="flex items-start justify-between mb-2">
                       <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-lg bg-accent-blue/10 flex items-center justify-center">
-                          <Server size={16} className="text-accent-blue" />
+                        <div className={cn(
+                          'w-8 h-8 rounded-lg flex items-center justify-center',
+                          plugin.category === 'lsp' ? 'bg-accent-yellow/10' :
+                          plugin.category === 'integrations' ? 'bg-accent-blue/10' :
+                          plugin.category === 'workflows' ? 'bg-accent-purple/10' :
+                          'bg-accent-green/10'
+                        )}>
+                          {plugin.category === 'lsp' ? <Cpu size={16} className="text-accent-yellow" /> :
+                           plugin.category === 'integrations' ? <Globe size={16} className="text-accent-blue" /> :
+                           plugin.category === 'workflows' ? <Zap size={16} className="text-accent-purple" /> :
+                           <Eye size={16} className="text-accent-green" />}
                         </div>
                         <div>
-                          <span className="text-sm font-medium">{server.label}</span>
-                          {server.category === 'official' && (
-                            <span className="ml-1.5 badge-blue text-[9px]">Official</span>
-                          )}
+                          <span className="text-sm font-medium">{plugin.label}</span>
                         </div>
                       </div>
-                      {installed && <span className="badge-green text-[10px] flex items-center gap-0.5"><Check size={10} /> Installed</span>}
+                      {installed && (
+                        <span className={cn('text-[10px] flex items-center gap-0.5', enabled ? 'badge-green' : 'badge text-text-muted')}>
+                          {enabled ? <><Check size={10} /> Enabled</> : 'Disabled'}
+                        </span>
+                      )}
                     </div>
-                    <p className="text-xs text-text-secondary mb-2">{server.desc}</p>
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] text-text-muted font-mono truncate max-w-[60%]" title={`${server.command} ${server.args.join(' ')}`}>
-                        {server.command} {server.args.slice(-1)[0]}
-                      </span>
+
+                    <p className="text-xs text-text-secondary mb-2">{plugin.desc}</p>
+
+                    {/* Component badges */}
+                    <div className="flex flex-wrap gap-1 mb-3">
+                      {plugin.components.map(comp => (
+                        <span key={comp} className={cn('px-1.5 py-0.5 rounded text-[9px] font-medium', COMPONENT_COLORS[comp] || 'bg-bg-tertiary text-text-muted')}>
+                          {comp}
+                        </span>
+                      ))}
+                    </div>
+
+                    {plugin.requires && (
+                      <div className="text-[10px] text-text-muted mb-2">
+                        Requires: <code className="px-1 py-0.5 rounded bg-bg-tertiary font-mono">{plugin.requires}</code>
+                      </div>
+                    )}
+
+                    {/* Actions */}
+                    <div className="flex items-center justify-between pt-2 border-t border-border">
+                      <button
+                        onClick={() => copyCommand(installCmd, plugin.name)}
+                        className="btn-ghost text-[10px] gap-1"
+                        title="Copy install command"
+                      >
+                        {copied === plugin.name ? <Check size={10} className="text-accent-green" /> : <Copy size={10} />}
+                        {copied === plugin.name ? 'Copied!' : 'Copy Command'}
+                      </button>
+
                       {installed ? (
-                        <button onClick={() => handleUninstall(server.name)} className="btn-ghost text-xs text-accent-red py-1">
-                          <Trash2 size={12} /> Remove
-                        </button>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => togglePlugin(`${plugin.name}@${plugin.marketplace}`)}
+                            className={cn('btn-ghost text-xs py-1', enabled ? 'text-accent-orange' : 'text-text-muted')}
+                          >
+                            {enabled ? <EyeOff size={12} /> : <Eye size={12} />}
+                            {enabled ? 'Disable' : 'Enable'}
+                          </button>
+                          <button
+                            onClick={() => removePlugin(`${plugin.name}@${plugin.marketplace}`)}
+                            className="btn-ghost text-xs py-1 text-accent-red"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
                       ) : (
-                        <button
-                          onClick={() => handleInstall(server)}
-                          disabled={isInstalling}
-                          className="btn-primary text-xs py-1"
-                        >
-                          {isInstalling ? (
-                            <><span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" /> Installing...</>
-                          ) : (
-                            <><Download size={12} /> Install</>
-                          )}
+                        <button onClick={() => installPlugin(plugin)} className="btn-primary text-xs py-1">
+                          <Plug size={12} /> Enable
                         </button>
                       )}
                     </div>
-                    {server.envKeys && server.envKeys.length > 0 && (
-                      <div className="mt-2 pt-2 border-t border-border">
-                        <span className="text-[10px] text-text-muted">
-                          Requires: {server.envKeys.join(', ')}
-                        </span>
+                  </div>
+                )
+              })}
+            </div>
+          )
+        )}
+
+        {/* ── INSTALLED TAB ── */}
+        {activeTab === 'installed' && (
+          installedEntries.length === 0 ? (
+            <EmptyState
+              icon={<Plug size={24} />}
+              title="No Plugins Installed"
+              description="Browse the Discover tab to find and enable plugins, or install them via the terminal with /plugin install."
+              action={<button onClick={() => setActiveTab('discover')} className="btn-primary text-sm"><Package size={16} /> Discover Plugins</button>}
+            />
+          ) : (
+            <div className="space-y-3">
+              {installedEntries.map(([key, enabled]) => {
+                const [name, marketplace] = key.split('@')
+                const catalogEntry = PLUGIN_CATALOG.find(p => p.name === name)
+                return (
+                  <div key={key} className="card-hover">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className={cn(
+                          'w-9 h-9 rounded-lg flex items-center justify-center',
+                          enabled ? 'bg-accent-green/10' : 'bg-bg-tertiary'
+                        )}>
+                          <Plug size={18} className={enabled ? 'text-accent-green' : 'text-text-muted'} />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium">{catalogEntry?.label || name}</span>
+                            <span className={cn('text-[10px] px-1.5 py-0.5 rounded', enabled ? 'bg-accent-green/10 text-accent-green' : 'bg-bg-tertiary text-text-muted')}>
+                              {enabled ? 'Enabled' : 'Disabled'}
+                            </span>
+                          </div>
+                          <p className="text-xs text-text-muted font-mono">{key}</p>
+                          {catalogEntry && <p className="text-xs text-text-secondary mt-0.5">{catalogEntry.desc}</p>}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => togglePlugin(key)}
+                          className={cn('btn-ghost text-xs', enabled ? 'text-accent-orange' : 'text-accent-green')}
+                        >
+                          {enabled ? <><EyeOff size={14} /> Disable</> : <><Eye size={14} /> Enable</>}
+                        </button>
+                        <button onClick={() => removePlugin(key)} className="btn-ghost text-xs text-accent-red">
+                          <Trash2 size={14} /> Remove
+                        </button>
+                      </div>
+                    </div>
+                    {catalogEntry && (
+                      <div className="flex flex-wrap gap-1 mt-2 pt-2 border-t border-border">
+                        {catalogEntry.components.map(comp => (
+                          <span key={comp} className={cn('px-1.5 py-0.5 rounded text-[9px] font-medium', COMPONENT_COLORS[comp] || 'bg-bg-tertiary text-text-muted')}>
+                            {comp}
+                          </span>
+                        ))}
                       </div>
                     )}
                   </div>
@@ -345,180 +455,249 @@ export function PluginsPage() {
               })}
             </div>
           )
-        ) : (
-          /* Installed Tab */
-          installedEntries.length === 0 ? (
-            <EmptyState
-              icon={<Server size={24} />}
-              title="No Servers Installed"
-              description="Browse the marketplace to discover and install MCP servers."
-              action={<button onClick={() => setActiveTab('marketplace')} className="btn-primary text-sm"><Package size={16} /> Browse Marketplace</button>}
-            />
-          ) : (
-            <div className="space-y-3">
-              {installedEntries.map(([name, config]) => (
-                <div key={name} className="card-hover">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-lg bg-accent-green/10 flex items-center justify-center">
-                        <Server size={18} className="text-accent-green" />
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium">{name}</span>
-                          <span className="badge-blue text-[10px]">{config.type || 'stdio'}</span>
-                        </div>
-                        <p className="text-xs text-text-muted font-mono">
-                          {config.command ? `${config.command} ${(config.args || []).join(' ')}` : config.url || 'No URL'}
-                        </p>
-                      </div>
+        )}
+
+        {/* ── MARKETPLACES TAB ── */}
+        {activeTab === 'marketplaces' && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-medium text-text-primary">Plugin Marketplaces</h3>
+                <p className="text-xs text-text-muted mt-0.5">Marketplaces are sources where plugins are published and discovered.</p>
+              </div>
+              <button onClick={() => { setShowAddMarketplace(true); setNewMpName(''); setNewMpSource(''); setNewMpType('github') }} className="btn-primary text-sm">
+                <Plus size={16} /> Add Marketplace
+              </button>
+            </div>
+
+            {/* Default marketplace */}
+            <div className="card-hover border-accent-orange/20">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-accent-orange/10 flex items-center justify-center">
+                    <Star size={18} className="text-accent-orange" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium">claude-plugins-official</span>
+                      <span className="badge-orange text-[10px]">Default</span>
                     </div>
-                    <button onClick={() => handleUninstall(name)} className="btn-ghost text-xs text-accent-red">
-                      <Trash2 size={14} /> Remove
+                    <p className="text-xs text-text-secondary">Official plugin registry maintained by Anthropic</p>
+                    <p className="text-[10px] text-text-muted font-mono mt-0.5">anthropics/claude-plugins-official</p>
+                  </div>
+                </div>
+                <span className="text-[10px] text-text-muted">Auto-included</span>
+              </div>
+            </div>
+
+            {/* User-added marketplaces */}
+            {marketplaceEntries.map(([name, config]) => (
+              <div key={name} className="card-hover">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-lg bg-accent-blue/10 flex items-center justify-center">
+                      <Store size={18} className="text-accent-blue" />
+                    </div>
+                    <div>
+                      <span className="text-sm font-medium">{name}</span>
+                      <p className="text-[10px] text-text-muted font-mono mt-0.5">
+                        {typeof config?.source === 'string' ? config.source :
+                         config?.source?.repo || config?.source?.url || JSON.stringify(config?.source)}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => copyCommand(`/plugin marketplace update ${name}`, `mp-${name}`)}
+                      className="btn-ghost text-xs"
+                    >
+                      {copied === `mp-${name}` ? <Check size={12} className="text-accent-green" /> : <RefreshCw size={12} />}
+                      Update
+                    </button>
+                    <button onClick={() => removeMarketplace(name)} className="btn-ghost text-xs text-accent-red">
+                      <Trash2 size={14} />
                     </button>
                   </div>
-                  {config.env && Object.keys(config.env).length > 0 && (
-                    <div className="mt-2 pt-2 border-t border-border">
-                      <span className="text-[10px] text-text-muted">
-                        Env: {Object.keys(config.env).join(', ')}
-                      </span>
-                    </div>
-                  )}
                 </div>
-              ))}
+              </div>
+            ))}
+
+            {/* Community marketplaces info */}
+            <div className="card bg-bg-secondary/50 border-dashed">
+              <h4 className="text-xs font-medium text-text-secondary mb-2">Community Marketplaces</h4>
+              <div className="space-y-2 text-xs text-text-muted">
+                <div className="flex items-center justify-between">
+                  <span>claude-plugins.dev</span>
+                  <button onClick={() => copyCommand('/plugin marketplace add https://claude-plugins.dev', 'cpd')} className="btn-ghost text-[10px]">
+                    {copied === 'cpd' ? <Check size={10} className="text-accent-green" /> : <Copy size={10} />}
+                    Copy Command
+                  </button>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>claudemarketplaces.com</span>
+                  <button onClick={() => copyCommand('/plugin marketplace add https://claudemarketplaces.com', 'cmc')} className="btn-ghost text-[10px]">
+                    {copied === 'cmc' ? <Check size={10} className="text-accent-green" /> : <Copy size={10} />}
+                    Copy Command
+                  </button>
+                </div>
+              </div>
             </div>
-          )
+          </div>
+        )}
+
+        {/* ── GUIDE TAB ── */}
+        {activeTab === 'guide' && (
+          <div className="max-w-2xl space-y-6">
+            <div>
+              <h3 className="text-lg font-heading font-semibold text-text-primary mb-2">Plugin System Guide</h3>
+              <p className="text-sm text-text-secondary">
+                Plugins are packages that bundle multiple components — slash commands, agents, skills, hooks, MCP servers, and LSP servers — into a single installable unit.
+              </p>
+            </div>
+
+            <div className="card">
+              <h4 className="text-sm font-medium text-text-primary mb-2">What Plugins Can Include</h4>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                {Object.entries(COMPONENT_COLORS).map(([comp, color]) => (
+                  <div key={comp} className="flex items-center gap-2 p-2 rounded-lg bg-bg-secondary">
+                    <span className={cn('px-1.5 py-0.5 rounded text-[10px] font-medium', color)}>{comp}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="card">
+              <h4 className="text-sm font-medium text-text-primary mb-3">Terminal Commands</h4>
+              <div className="space-y-3">
+                {[
+                  { label: 'Open Plugin Manager', cmd: '/plugin', desc: 'Interactive browser with Discover, Installed, Marketplaces tabs' },
+                  { label: 'Install Plugin', cmd: '/plugin install name@marketplace', desc: 'Install a specific plugin' },
+                  { label: 'Uninstall Plugin', cmd: '/plugin uninstall name@marketplace', desc: 'Remove a plugin completely' },
+                  { label: 'Disable Plugin', cmd: '/plugin disable name@marketplace', desc: 'Disable without removing' },
+                  { label: 'Enable Plugin', cmd: '/plugin enable name@marketplace', desc: 'Re-enable a disabled plugin' },
+                  { label: 'Add Marketplace', cmd: '/plugin marketplace add owner/repo', desc: 'Register a GitHub-hosted marketplace' },
+                  { label: 'List Marketplaces', cmd: '/plugin marketplace list', desc: 'View all configured marketplaces' },
+                  { label: 'Update Marketplace', cmd: '/plugin marketplace update name', desc: 'Refresh plugins from a marketplace' },
+                  { label: 'Remove Marketplace', cmd: '/plugin marketplace remove name', desc: 'Remove marketplace and its plugins' },
+                ].map(item => (
+                  <div key={item.label} className="flex items-start gap-3 py-2">
+                    <div className="flex-1">
+                      <div className="text-xs font-medium text-text-primary">{item.label}</div>
+                      <div className="text-[10px] text-text-muted mt-0.5">{item.desc}</div>
+                    </div>
+                    <button
+                      onClick={() => copyCommand(item.cmd, item.label)}
+                      className="flex items-center gap-1.5 px-2 py-1 rounded bg-bg-tertiary font-mono text-[11px] text-text-secondary hover:text-text-primary transition-colors whitespace-nowrap"
+                    >
+                      {copied === item.label ? <Check size={10} className="text-accent-green" /> : <Copy size={10} />}
+                      {item.cmd}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="card">
+              <h4 className="text-sm font-medium text-text-primary mb-2">Install Scopes</h4>
+              <div className="space-y-2">
+                {[
+                  { scope: '--scope user', desc: 'Available across all your projects (default)' },
+                  { scope: '--scope project', desc: 'Shared with team via .claude/settings.json' },
+                  { scope: '--scope local', desc: 'Only for you in this repo (gitignored)' },
+                ].map(item => (
+                  <div key={item.scope} className="flex items-center gap-3 py-1.5">
+                    <code className="px-2 py-0.5 rounded bg-bg-tertiary text-[11px] font-mono text-accent-cyan">{item.scope}</code>
+                    <span className="text-xs text-text-secondary">{item.desc}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="card bg-accent-blue/5 border-accent-blue/20">
+              <div className="flex items-start gap-2">
+                <AlertTriangle size={14} className="text-accent-blue mt-0.5 flex-shrink-0" />
+                <div>
+                  <h4 className="text-xs font-medium text-accent-blue">Plugins vs MCP Servers</h4>
+                  <p className="text-[11px] text-text-secondary mt-1">
+                    MCP servers are a component that plugins can include — not a competing system. Use the <strong>MCP Servers</strong> page for standalone server configuration. Use <strong>Plugins</strong> for bundled packages that may include commands, agents, skills, hooks, and MCP servers together.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
         )}
       </div>
 
-      {/* Environment Variables Modal */}
+      {/* Add Marketplace Modal */}
       <Modal
-        open={showEnvModal}
-        onClose={() => setShowEnvModal(false)}
-        title={`Configure ${envTarget?.label || ''}`}
-        description="Enter required environment variables (leave empty to skip)"
+        open={showAddMarketplace}
+        onClose={() => setShowAddMarketplace(false)}
+        title="Add Plugin Marketplace"
+        description="Register a new marketplace to discover and install plugins from"
         size="md"
         footer={
           <>
-            <button onClick={() => setShowEnvModal(false)} className="btn-secondary text-sm">Cancel</button>
+            <button onClick={() => setShowAddMarketplace(false)} className="btn-secondary text-sm">Cancel</button>
             <button
-              onClick={() => {
-                if (envTarget) {
-                  doInstall(envTarget, envValues)
-                  setShowEnvModal(false)
-                }
-              }}
+              onClick={handleAddMarketplace}
+              disabled={!newMpName.trim() || !newMpSource.trim()}
               className="btn-primary text-sm"
             >
-              <Download size={14} /> Install
-            </button>
-          </>
-        }
-      >
-        <div className="space-y-3">
-          {envTarget?.envKeys?.map(key => (
-            <div key={key}>
-              <label className="label">{key}</label>
-              <input
-                value={envValues[key] || ''}
-                onChange={e => setEnvValues(prev => ({ ...prev, [key]: e.target.value }))}
-                placeholder={envTarget.envHints?.[key] || 'Enter value...'}
-                className="input font-mono text-sm"
-                type={key.toLowerCase().includes('key') || key.toLowerCase().includes('token') || key.toLowerCase().includes('secret') ? 'password' : 'text'}
-              />
-            </div>
-          ))}
-          <p className="text-[11px] text-text-muted">
-            Variables are stored in your Claude config. You can leave fields empty and configure them later.
-          </p>
-        </div>
-      </Modal>
-
-      {/* Add Custom Source Modal */}
-      <Modal
-        open={showCustom}
-        onClose={() => setShowCustom(false)}
-        title="Add Custom MCP Source"
-        description="Add a third-party MCP server via NPX package or remote URL"
-        size="md"
-        footer={
-          <>
-            <button onClick={() => setShowCustom(false)} className="btn-secondary text-sm">Cancel</button>
-            <button
-              onClick={handleCustomInstall}
-              disabled={!customName.trim() || (customTab === 'npx' ? !customPackage.trim() : !customUrl.trim())}
-              className="btn-primary text-sm"
-            >
-              <Download size={14} /> Install
+              <Plus size={14} /> Add Marketplace
             </button>
           </>
         }
       >
         <div className="space-y-4">
-          {/* Tab selector */}
-          <div className="flex gap-1 p-1 bg-bg-tertiary rounded-lg">
-            <button
-              onClick={() => setCustomTab('npx')}
-              className={cn('flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs transition-colors', customTab === 'npx' ? 'bg-bg-card text-text-primary shadow-sm' : 'text-text-muted')}
-            >
-              <Terminal size={14} /> NPX Package
-            </button>
-            <button
-              onClick={() => setCustomTab('url')}
-              className={cn('flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs transition-colors', customTab === 'url' ? 'bg-bg-card text-text-primary shadow-sm' : 'text-text-muted')}
-            >
-              <Globe size={14} /> Remote URL
-            </button>
-          </div>
-
           <div>
-            <label className="label">Server Name</label>
+            <label className="label">Marketplace Name</label>
             <input
-              value={customName}
-              onChange={e => setCustomName(e.target.value.replace(/[^a-z0-9-]/g, ''))}
-              placeholder="my-custom-server"
+              value={newMpName}
+              onChange={e => setNewMpName(e.target.value.replace(/[^a-z0-9-]/g, ''))}
+              placeholder="my-marketplace"
               className="input"
             />
           </div>
 
-          {customTab === 'npx' ? (
-            <div>
-              <label className="label">NPX Package</label>
-              <input
-                value={customPackage}
-                onChange={e => setCustomPackage(e.target.value)}
-                placeholder="@scope/mcp-server-name"
-                className="input font-mono"
-              />
-              <p className="text-[11px] text-text-muted mt-1">
-                The npm package name. Will be run as: npx -y {customPackage || '<package>'}
-              </p>
+          <div>
+            <label className="label">Source Type</label>
+            <div className="flex gap-1 p-1 bg-bg-tertiary rounded-lg">
+              {[
+                { id: 'github' as const, label: 'GitHub', icon: <GitBranch size={14} /> },
+                { id: 'url' as const, label: 'URL', icon: <Globe size={14} /> },
+                { id: 'local' as const, label: 'Local Path', icon: <Server size={14} /> },
+              ].map(t => (
+                <button
+                  key={t.id}
+                  onClick={() => setNewMpType(t.id)}
+                  className={cn('flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs transition-colors', newMpType === t.id ? 'bg-bg-card text-text-primary shadow-sm' : 'text-text-muted')}
+                >
+                  {t.icon} {t.label}
+                </button>
+              ))}
             </div>
-          ) : (
-            <div>
-              <label className="label">Server URL</label>
-              <input
-                value={customUrl}
-                onChange={e => setCustomUrl(e.target.value)}
-                placeholder="https://example.com/mcp"
-                className="input font-mono"
-              />
-              <p className="text-[11px] text-text-muted mt-1">
-                HTTP or SSE endpoint URL for the remote MCP server.
-              </p>
-            </div>
-          )}
+          </div>
 
           <div>
-            <label className="label">Environment Variables (JSON, optional)</label>
-            <textarea
-              value={customEnv}
-              onChange={e => setCustomEnv(e.target.value)}
-              placeholder={'{"API_KEY": "your-key-here"}'}
-              className="textarea font-mono"
-              rows={2}
+            <label className="label">
+              {newMpType === 'github' ? 'GitHub Repository (owner/repo)' :
+               newMpType === 'url' ? 'Marketplace URL' : 'Local Directory Path'}
+            </label>
+            <input
+              value={newMpSource}
+              onChange={e => setNewMpSource(e.target.value)}
+              placeholder={
+                newMpType === 'github' ? 'your-org/claude-plugins' :
+                newMpType === 'url' ? 'https://example.com/marketplace.json' :
+                './path/to/marketplace'
+              }
+              className="input font-mono"
             />
           </div>
+
+          <p className="text-[11px] text-text-muted">
+            After adding, run <code className="px-1 py-0.5 rounded bg-bg-tertiary font-mono">/plugin marketplace update {newMpName || 'name'}</code> in the terminal to fetch available plugins.
+          </p>
         </div>
       </Modal>
     </div>

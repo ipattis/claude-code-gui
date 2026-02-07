@@ -403,13 +403,28 @@ Select a server from the marketplace, fill in any required API keys, and install
     icon: <Plug size={18} />,
     content: `# Plugins
 
-The Plugins page provides discovery and management for MCP server plugins.
+Plugins are packages that bundle multiple components into a single installable unit. Unlike standalone MCP servers, plugins can contain slash commands, agents, skills, hooks, MCP servers, and LSP servers.
 
-## Features
-- Browse installed MCP servers from both user and project scopes
-- View server configuration details (command, args, environment)
-- Quick access to install new servers from the marketplace
-- Toggle servers between enabled and disabled states`
+## Four Tabs
+1. **Discover** — Browse the official plugin catalog organized by category (Code Intelligence, Integrations, Workflows, Output Styles)
+2. **Installed** — View and manage your enabled/disabled plugins with toggle controls
+3. **Marketplaces** — Add, update, and remove plugin marketplaces (GitHub repos, URLs, or local paths)
+4. **Guide** — Command reference and documentation for the plugin system
+
+## Plugin Categories
+- **Code Intelligence (LSP)** — Language servers for Python, TypeScript, Rust, Go, Java, C/C++, C#, PHP, Swift, Kotlin, Lua
+- **External Integrations** — GitHub, GitLab, Atlassian, Slack, Notion, Linear, Figma, Vercel, Firebase, Supabase, Sentry
+- **Development Workflows** — Commit commands, PR review toolkit, code review, feature development
+- **Output Styles** — Explanatory and learning response modes
+
+## How It Works
+- Plugins are installed via \`/plugin install name@marketplace\` in the terminal
+- Enable/disable plugins directly from the GUI by toggling them in settings.json
+- Add custom marketplaces (GitHub repos, URLs) to discover third-party plugins
+- The official marketplace (\`claude-plugins-official\`) is included by default
+
+## Plugins vs MCP Servers
+MCP servers are one component that plugins can include. Use the **MCP Servers** page for standalone server configuration. Use **Plugins** for bundled packages.`
   },
   {
     id: 'permissions',

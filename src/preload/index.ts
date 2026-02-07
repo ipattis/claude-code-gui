@@ -27,6 +27,8 @@ const api = {
     pickFile: (filters?: any) => ipcRenderer.invoke('fs:pick-file', filters),
     getClaudePaths: () => ipcRenderer.invoke('fs:get-claude-paths'),
     scanProject: (dir: string) => ipcRenderer.invoke('fs:scan-project', dir),
+    scanActivity: (options: { projectDir: string; sinceMs: number; maxDepth?: number }) =>
+      ipcRenderer.invoke('fs:scan-activity', options),
   },
 
   // Config

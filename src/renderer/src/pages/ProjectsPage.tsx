@@ -3,7 +3,8 @@ import {
   FolderOpen, Plus, Check, X, ArrowRight, Globe,
   FileText, Settings, Zap, Bot, Command, Server, Pencil,
   Brain, BookOpen, Lock, ChevronRight, ChevronDown,
-  Folder, File, Play, Loader2, ArrowLeft, Eye, Copy, CheckCheck
+  Folder, File, Play, Loader2, ArrowLeft, Eye, Copy, CheckCheck,
+  Activity, Clock, RefreshCw, MapPin, HardDrive, ExternalLink
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { cn, getApi } from '../lib/utils'
@@ -36,6 +37,39 @@ interface FileEntry {
 
 const EXECUTABLE_EXTS = ['py', 'js', 'ts', 'sh', 'bash']
 
+interface ActivityFile {
+  name: string
+  path: string
+  relativePath: string
+  size: number
+  modified: number
+  ext: string
+  location: 'project' | 'scratchpad' | 'claude-config' | 'other'
+}
+
+const TIME_RANGES = [
+  { label: '1h', ms: 60 * 60 * 1000 },
+  { label: '4h', ms: 4 * 60 * 60 * 1000 },
+  { label: '24h', ms: 24 * 60 * 60 * 1000 },
+  { label: '7d', ms: 7 * 24 * 60 * 60 * 1000 },
+  { label: '30d', ms: 30 * 24 * 60 * 60 * 1000 },
+]
+
+const LOCATION_META: Record<ActivityFile['location'], { label: string; color: string; icon: React.ReactNode }> = {
+  project:        { label: 'Project',        color: 'text-accent-blue',   icon: <FolderOpen size={13} /> },
+  scratchpad:     { label: 'Scratchpad',     color: 'text-accent-orange', icon: <HardDrive size={13} /> },
+  'claude-config': { label: 'Claude Config', color: 'text-accent-purple', icon: <Settings size={13} /> },
+  other:          { label: 'Other',          color: 'text-text-muted',    icon: <MapPin size={13} /> },
+}
+
+function timeAgo(ts: number): string {
+  const diff = Date.now() - ts
+  if (diff < 60_000) return 'just now'
+  if (diff < 3600_000) return `${Math.floor(diff / 60_000)}m ago`
+  if (diff < 86400_000) return `${Math.floor(diff / 3600_000)}h ago`
+  return `${Math.floor(diff / 86400_000)}d ago`
+}
+
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
@@ -63,7 +97,7 @@ export function ProjectsPage() {
   const [scanning, setScanning] = useState(false)
 
   // File browser state
-  const [activeTab, setActiveTab] = useState<'config' | 'files'>('config')
+  const [activeTab, setActiveTab] = useState<'config' | 'files' | 'trail'>('config')
   const [browserPath, setBrowserPath] = useState<string | null>(null)
   const [files, setFiles] = useState<FileEntry[]>([])
   const [loadingFiles, setLoadingFiles] = useState(false)
@@ -73,6 +107,15 @@ export function ProjectsPage() {
   const [running, setRunning] = useState(false)
   const [runOutput, setRunOutput] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+
+  // Activity Trail state
+  const [trailFiles, setTrailFiles] = useState<ActivityFile[]>([])
+  const [trailLoading, setTrailLoading] = useState(false)
+  const [trailRange, setTrailRange] = useState(TIME_RANGES[2]) // default 24h
+  const [trailSelectedFile, setTrailSelectedFile] = useState<ActivityFile | null>(null)
+  const [trailFileContent, setTrailFileContent] = useState<string | null>(null)
+  const [trailLoadingContent, setTrailLoadingContent] = useState(false)
+  const [trailCollapsed, setTrailCollapsed] = useState<Record<string, boolean>>({})
 
   const openProject = useCallback(async () => {
     const api = getApi()
@@ -118,17 +161,14 @@ export function ProjectsPage() {
 
     try {
       const result = await api.fs.listDir(dirPath)
-      if (Array.isArray(result)) {
-        // Sort: directories first, then files, alphabetically
-        const sorted = result.sort((a: FileEntry, b: FileEntry) => {
-          if (a.isDirectory && !b.isDirectory) return -1
-          if (!a.isDirectory && b.isDirectory) return 1
-          return a.name.localeCompare(b.name)
-        })
-        setFiles(sorted)
-      } else {
-        setFiles([])
-      }
+      const entries: FileEntry[] = Array.isArray(result) ? result : (result?.entries || [])
+      // Sort: directories first, then files, alphabetically
+      const sorted = entries.sort((a: FileEntry, b: FileEntry) => {
+        if (a.isDirectory && !b.isDirectory) return -1
+        if (!a.isDirectory && b.isDirectory) return 1
+        return a.name.localeCompare(b.name)
+      })
+      setFiles(sorted)
       setBrowserPath(dirPath)
     } catch {
       setFiles([])
@@ -201,6 +241,63 @@ export function ProjectsPage() {
       setTimeout(() => setCopied(false), 2000)
     }
   }, [fileContent])
+
+  // Scan activity trail
+  const scanActivity = useCallback(async (range?: typeof TIME_RANGES[number]) => {
+    const api = getApi()
+    if (!api || !currentProjectDir) return
+
+    const r = range || trailRange
+    setTrailLoading(true)
+    setTrailSelectedFile(null)
+    setTrailFileContent(null)
+
+    try {
+      const sinceMs = Date.now() - r.ms
+      const results = await api.fs.scanActivity({ projectDir: currentProjectDir, sinceMs })
+      setTrailFiles(results || [])
+    } catch {
+      setTrailFiles([])
+    }
+    setTrailLoading(false)
+  }, [currentProjectDir, trailRange])
+
+  // Auto-scan when switching to trail tab
+  useEffect(() => {
+    if (activeTab === 'trail' && currentProjectDir && trailFiles.length === 0 && !trailLoading) {
+      scanActivity()
+    }
+  }, [activeTab, currentProjectDir])
+
+  // View a trail file
+  const viewTrailFile = useCallback(async (file: ActivityFile) => {
+    const api = getApi()
+    if (!api) return
+
+    setTrailSelectedFile(file)
+    setTrailLoadingContent(true)
+
+    try {
+      const result = await api.fs.read(file.path)
+      setTrailFileContent(result.content || '')
+    } catch {
+      setTrailFileContent('[Unable to read file]')
+    }
+    setTrailLoadingContent(false)
+  }, [])
+
+  // Toggle location group collapse
+  const toggleTrailGroup = useCallback((location: string) => {
+    setTrailCollapsed(prev => ({ ...prev, [location]: !prev[location] }))
+  }, [])
+
+  // Group trail files by location
+  const trailGroups = trailFiles.reduce<Record<string, ActivityFile[]>>((acc, file) => {
+    const key = file.location
+    if (!acc[key]) acc[key] = []
+    acc[key].push(file)
+    return acc
+  }, {})
 
   const goTo = (path: string, setup?: () => void) => {
     if (setup) setup()
@@ -347,6 +444,17 @@ export function ProjectsPage() {
                 )}
               >
                 File Browser
+              </button>
+              <button
+                onClick={() => setActiveTab('trail')}
+                className={cn(
+                  'px-3 py-1.5 text-xs font-medium rounded-md transition-colors flex items-center gap-1.5',
+                  activeTab === 'trail'
+                    ? 'bg-bg-secondary text-text-primary shadow-sm'
+                    : 'text-text-muted hover:text-text-secondary'
+                )}
+              >
+                <Activity size={12} /> Activity Trail
               </button>
             </div>
           )}
@@ -590,8 +698,188 @@ export function ProjectsPage() {
           </div>
         )}
 
+        {/* ==================== ACTIVITY TRAIL TAB ==================== */}
+        {activeTab === 'trail' && currentProjectDir && (
+          <div className="flex gap-4 h-full" style={{ minHeight: 'calc(100vh - 200px)' }}>
+            {/* Trail list panel */}
+            <div className="w-96 flex-shrink-0 flex flex-col">
+              {/* Controls bar */}
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-1 bg-bg-tertiary rounded-lg p-0.5">
+                  {TIME_RANGES.map((r) => (
+                    <button
+                      key={r.label}
+                      onClick={() => { setTrailRange(r); scanActivity(r) }}
+                      className={cn(
+                        'px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors',
+                        trailRange.label === r.label
+                          ? 'bg-bg-secondary text-text-primary shadow-sm'
+                          : 'text-text-muted hover:text-text-secondary'
+                      )}
+                    >
+                      {r.label}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  onClick={() => scanActivity()}
+                  disabled={trailLoading}
+                  className="btn-ghost text-xs px-2 py-1 gap-1"
+                >
+                  <RefreshCw size={12} className={trailLoading ? 'animate-spin' : ''} />
+                  Scan
+                </button>
+              </div>
+
+              {/* Results summary */}
+              <div className="text-[11px] text-text-muted mb-2 px-1">
+                {trailLoading ? 'Scanning...' : `${trailFiles.length} files modified in last ${trailRange.label}`}
+              </div>
+
+              {/* Grouped file list */}
+              <div className="card flex-1 overflow-y-auto p-0">
+                {trailLoading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 size={18} className="animate-spin text-text-muted" />
+                  </div>
+                ) : trailFiles.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 gap-2">
+                    <Activity size={20} className="text-text-muted" />
+                    <div className="text-xs text-text-muted">No activity found in this time range</div>
+                  </div>
+                ) : (
+                  <div>
+                    {(['project', 'scratchpad', 'claude-config', 'other'] as const)
+                      .filter(loc => trailGroups[loc]?.length > 0)
+                      .map((location) => {
+                        const meta = LOCATION_META[location]
+                        const groupFiles = trailGroups[location]
+                        const collapsed = trailCollapsed[location]
+
+                        return (
+                          <div key={location}>
+                            {/* Group header */}
+                            <button
+                              onClick={() => toggleTrailGroup(location)}
+                              className="w-full flex items-center gap-2 px-3 py-2 bg-bg-tertiary/50 border-b border-border/50 hover:bg-bg-tertiary transition-colors"
+                            >
+                              {collapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
+                              <span className={cn('flex items-center gap-1.5', meta.color)}>
+                                {meta.icon}
+                                <span className="text-xs font-medium">{meta.label}</span>
+                              </span>
+                              <span className="text-[10px] text-text-muted ml-auto">
+                                {groupFiles.length} file{groupFiles.length !== 1 ? 's' : ''}
+                              </span>
+                            </button>
+
+                            {/* Group files */}
+                            {!collapsed && (
+                              <div className="divide-y divide-border/30">
+                                {groupFiles.map((file) => (
+                                  <button
+                                    key={file.path}
+                                    onClick={() => viewTrailFile(file)}
+                                    className={cn(
+                                      'w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-bg-tertiary/70 transition-colors',
+                                      trailSelectedFile?.path === file.path && 'bg-bg-tertiary'
+                                    )}
+                                  >
+                                    <File size={12} className={cn(
+                                      EXECUTABLE_EXTS.includes(file.ext) ? 'text-accent-green' : 'text-text-muted'
+                                    )} />
+                                    <div className="flex flex-col min-w-0 flex-1">
+                                      <span className="text-xs truncate">{file.name}</span>
+                                      <span className="text-[10px] text-text-muted truncate">{file.relativePath}</span>
+                                    </div>
+                                    <div className="flex flex-col items-end flex-shrink-0 gap-0.5">
+                                      <span className="text-[10px] text-text-muted">{timeAgo(file.modified)}</span>
+                                      <span className="text-[10px] text-text-muted">{formatFileSize(file.size)}</span>
+                                    </div>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Trail file viewer */}
+            <div className="flex-1 flex flex-col min-w-0">
+              {trailSelectedFile ? (
+                <>
+                  {/* File header */}
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex flex-col gap-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <File size={14} className={cn(
+                          EXECUTABLE_EXTS.includes(trailSelectedFile.ext) ? 'text-accent-green' : 'text-text-muted'
+                        )} />
+                        <span className="text-sm font-mono font-medium truncate">{trailSelectedFile.name}</span>
+                        <span className={cn(
+                          'text-[10px] px-1.5 py-0.5 rounded-full font-medium',
+                          LOCATION_META[trailSelectedFile.location].color,
+                          'bg-bg-tertiary'
+                        )}>
+                          {LOCATION_META[trailSelectedFile.location].label}
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-text-muted font-mono truncate pl-6">
+                        {trailSelectedFile.path}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className="text-[10px] text-text-muted flex items-center gap-1">
+                        <Clock size={10} /> {timeAgo(trailSelectedFile.modified)}
+                      </span>
+                      <span className="text-[10px] text-text-muted">{formatFileSize(trailSelectedFile.size)}</span>
+                      <button
+                        onClick={() => {
+                          if (trailFileContent) {
+                            navigator.clipboard.writeText(trailFileContent)
+                            setCopied(true)
+                            setTimeout(() => setCopied(false), 2000)
+                          }
+                        }}
+                        className="btn-ghost text-xs px-2 py-1 gap-1"
+                      >
+                        {copied ? <CheckCheck size={12} className="text-accent-green" /> : <Copy size={12} />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* File content */}
+                  <div className="card flex-1 overflow-auto p-0 font-mono text-xs">
+                    {trailLoadingContent ? (
+                      <div className="flex items-center justify-center py-8">
+                        <Loader2 size={16} className="animate-spin text-text-muted" />
+                      </div>
+                    ) : (
+                      <pre className="p-4 whitespace-pre-wrap break-words leading-relaxed text-text-secondary">
+                        {trailFileContent}
+                      </pre>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div className="flex-1 flex items-center justify-center">
+                  <EmptyState
+                    icon={<Activity size={24} />}
+                    title="Activity Trail"
+                    description="Select a file to view its contents. This shows all files modified by Claude — including files created outside your project directory (scratchpad, temp, config)."
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* No project selected */}
-        {activeTab === 'files' && !currentProjectDir && (
+        {(activeTab === 'files' || activeTab === 'trail') && !currentProjectDir && (
           <EmptyState
             icon={<FolderOpen size={24} />}
             title="No Project Selected"

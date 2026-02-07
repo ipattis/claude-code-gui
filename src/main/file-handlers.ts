@@ -1,7 +1,8 @@
 import { IpcMain, dialog } from 'electron'
-import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync, unlinkSync, realpathSync } from 'fs'
-import { join, dirname, basename, extname, resolve } from 'path'
+import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync, unlinkSync, realpathSync, lstatSync } from 'fs'
+import { join, dirname, basename, extname, resolve, relative } from 'path'
 import { homedir } from 'os'
+import { execSync } from 'child_process'
 
 /**
  * Validates that a file path is within allowed directories.
@@ -130,6 +131,98 @@ export function registerFileHandlers(ipcMain: IpcMain): void {
       globalCommands: join(home, '.claude', 'commands'),
       claudeJson: join(home, '.claude.json'),
     }
+  })
+
+  // Scan for files modified since a given timestamp across known locations
+  // This powers the "Activity Trail" — showing everything Claude touched
+  ipcMain.handle('fs:scan-activity', async (_event, options: {
+    projectDir: string
+    sinceMs: number    // timestamp in milliseconds
+    maxDepth?: number  // how deep to recurse (default 6)
+  }) => {
+    const { projectDir, sinceMs, maxDepth = 6 } = options
+    const since = sinceMs / 1000 // convert to seconds for find command
+    const home = homedir()
+
+    interface ActivityFile {
+      name: string
+      path: string
+      relativePath: string
+      size: number
+      modified: number
+      ext: string
+      location: 'project' | 'scratchpad' | 'claude-config' | 'other'
+    }
+
+    const results: ActivityFile[] = []
+    const seen = new Set<string>()
+
+    // Helper: recursively scan a directory for recently modified files
+    function scanDir(dir: string, location: ActivityFile['location'], depth = 0) {
+      if (depth > maxDepth || !existsSync(dir)) return
+      try {
+        const entries = readdirSync(dir)
+        for (const name of entries) {
+          // Skip common noise directories
+          if (name === 'node_modules' || name === '.git' || name === '.DS_Store' || name === '__pycache__') continue
+
+          const fullPath = join(dir, name)
+          if (seen.has(fullPath)) continue
+          seen.add(fullPath)
+
+          try {
+            const stat = statSync(fullPath)
+            if (stat.isDirectory()) {
+              scanDir(fullPath, location, depth + 1)
+            } else if (stat.isFile() && stat.mtimeMs >= sinceMs) {
+              results.push({
+                name,
+                path: fullPath,
+                relativePath: fullPath.startsWith(projectDir)
+                  ? relative(projectDir, fullPath)
+                  : fullPath.startsWith(home)
+                    ? '~/' + relative(home, fullPath)
+                    : fullPath,
+                size: stat.size,
+                modified: stat.mtimeMs,
+                ext: extname(name).slice(1).toLowerCase(),
+                location,
+              })
+            }
+          } catch { /* skip unreadable files */ }
+        }
+      } catch { /* skip unreadable dirs */ }
+    }
+
+    // 1. Scan project directory
+    if (existsSync(projectDir)) {
+      scanDir(projectDir, 'project')
+    }
+
+    // 2. Scan Claude scratchpad directories (/private/tmp/claude-*)
+    try {
+      const tmpDirs = ['/private/tmp', '/tmp']
+      for (const tmpBase of tmpDirs) {
+        if (!existsSync(tmpBase)) continue
+        const entries = readdirSync(tmpBase)
+        for (const entry of entries) {
+          if (entry.startsWith('claude-')) {
+            scanDir(join(tmpBase, entry), 'scratchpad')
+          }
+        }
+      }
+    } catch { /* ignore */ }
+
+    // 3. Scan Claude config directories that might have been modified
+    const claudeProjectDir = join(home, '.claude', 'projects')
+    if (existsSync(claudeProjectDir)) {
+      scanDir(claudeProjectDir, 'claude-config', 0)
+    }
+
+    // Sort by modification time (newest first)
+    results.sort((a, b) => b.modified - a.modified)
+
+    return results
   })
 
   // Scan for project-level AND global Claude configs

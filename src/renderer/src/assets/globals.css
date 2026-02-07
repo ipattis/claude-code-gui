@@ -1,0 +1,168 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Theme Variables ─────────────────────────────────── */
+/* Light mode (default) */
+:root {
+  --bg-primary: #f8fafc;
+  --bg-secondary: #f1f5f9;
+  --bg-tertiary: #e2e8f0;
+  --bg-card: #ffffff;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+  --border-color: #e2e8f0;
+  --scrollbar-thumb: #cbd5e1;
+  --scrollbar-hover: #94a3b8;
+  --selection-bg: rgba(255, 107, 53, 0.2);
+}
+
+/* Dark mode */
+.dark {
+  --bg-primary: #0a0a0f;
+  --bg-secondary: #12121a;
+  --bg-tertiary: #1a1a25;
+  --bg-card: #16161f;
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --border-color: #2a2a3a;
+  --scrollbar-thumb: #2a2a3a;
+  --scrollbar-hover: #3a3a4a;
+  --selection-bg: rgba(255, 107, 53, 0.3);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-bg-primary text-text-primary;
+    font-family: 'Inter', sans-serif;
+    overflow: hidden;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Space Grotesk', sans-serif;
+  }
+  code, pre, .font-mono {
+    font-family: 'JetBrains Mono', monospace;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-bg-card rounded-card border border-border p-5;
+  }
+  .card-hover {
+    @apply card transition-all duration-200 hover:border-accent-orange/30 hover:shadow-lg hover:shadow-accent-orange/5;
+  }
+  .btn-primary {
+    @apply inline-flex items-center gap-2 px-4 py-2 rounded-lg
+           bg-gradient-to-r from-accent-orange to-accent-coral
+           text-white font-medium text-sm
+           hover:shadow-lg hover:shadow-accent-orange/25
+           transition-all duration-200
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center gap-2 px-4 py-2 rounded-lg
+           bg-bg-tertiary border border-border
+           text-text-primary font-medium text-sm
+           hover:border-text-muted hover:bg-bg-secondary
+           transition-all duration-200
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center gap-2 px-3 py-1.5 rounded-lg
+           text-text-secondary text-sm
+           hover:text-text-primary hover:bg-bg-tertiary
+           transition-all duration-200;
+  }
+  .btn-danger {
+    @apply inline-flex items-center gap-2 px-4 py-2 rounded-lg
+           bg-accent-red/10 border border-accent-red/30
+           text-accent-red font-medium text-sm
+           hover:bg-accent-red/20 hover:border-accent-red/50
+           transition-all duration-200;
+  }
+  .input {
+    @apply w-full px-3 py-2 rounded-lg
+           bg-bg-primary border border-border
+           text-text-primary text-sm font-body
+           placeholder:text-text-muted
+           focus:outline-none focus:ring-2 focus:ring-accent-orange/50 focus:border-accent-orange/50
+           transition-all duration-200;
+  }
+  .textarea {
+    @apply input resize-none;
+  }
+  .label {
+    @apply block text-sm font-medium text-text-secondary mb-1.5;
+  }
+  .badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium;
+  }
+  .badge-orange {
+    @apply badge bg-accent-orange/10 text-accent-orange;
+  }
+  .badge-green {
+    @apply badge bg-accent-green/10 text-accent-green;
+  }
+  .badge-red {
+    @apply badge bg-accent-red/10 text-accent-red;
+  }
+  .badge-blue {
+    @apply badge bg-accent-blue/10 text-accent-blue;
+  }
+  .badge-purple {
+    @apply badge bg-accent-purple/10 text-accent-purple;
+  }
+  .section-title {
+    @apply text-lg font-heading font-semibold text-text-primary mb-4;
+  }
+  .page-title {
+    @apply text-2xl font-heading font-bold text-text-primary mb-6;
+  }
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-hover);
+}
+
+/* Xterm styles override */
+.xterm {
+  padding: 8px;
+}
+.xterm-viewport::-webkit-scrollbar {
+  width: 8px;
+}
+.xterm-viewport::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 4px;
+}
+
+/* Selection */
+::selection {
+  background: var(--selection-bg);
+}
+
+/* Drag region for title bar */
+.drag-region {
+  -webkit-app-region: drag;
+}
+.no-drag {
+  -webkit-app-region: no-drag;
+}

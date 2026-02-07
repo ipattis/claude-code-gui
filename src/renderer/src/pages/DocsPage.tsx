@@ -1,0 +1,588 @@
+import React, { useState } from 'react'
+import {
+  HelpCircle, Terminal, FileText, Settings, Zap, Bot, Command,
+  Webhook, Server, Plug, Shield, Keyboard, Key, History,
+  FolderOpen, Brain, BookOpen, LayoutDashboard, Wand2, Search
+} from 'lucide-react'
+import { cn } from '../lib/utils'
+import { SearchInput } from '../components/shared/SearchInput'
+
+interface DocSection {
+  id: string
+  title: string
+  icon: React.ReactNode
+  content: string
+}
+
+const DOCS: DocSection[] = [
+  {
+    id: 'getting-started',
+    title: 'Getting Started',
+    icon: <HelpCircle size={18} />,
+    content: `# Getting Started with Claude Code GUI
+
+## What Is This?
+Claude Code GUI is a desktop application that wraps Claude Code CLI with a visual interface. It lets you manage every aspect of Claude Code — from terminal sessions to configuration files, MCP servers, skills, and more — without touching the command line.
+
+## Prerequisites
+You need **one** of the following to use Claude Code:
+
+**Option A — Anthropic API Key**
+- Sign up at console.anthropic.com
+- Create an API key and set it as ANTHROPIC_API_KEY
+
+**Option B — Claude Max or Pro Subscription**
+- Subscribe to Claude Max or Claude Pro at claude.ai
+- Run \`claude login\` in your terminal to authenticate
+- No API key needed — your subscription handles billing
+
+## Installing Claude Code CLI
+**Recommended: Native Installer** (no Node.js required)
+- macOS: \`brew install claude-code\`
+- Or download from the official Claude Code releases
+
+**Alternative: npm**
+- \`npm install -g @anthropic-ai/claude-code\`
+
+## Quick Start
+1. **Dashboard** — Check that the CLI is detected (green status badge)
+2. **Projects** — Open a project directory
+3. **CLAUDE.md** — Set up project context so Claude understands your codebase
+4. **Terminal** — Start a conversation with Claude Code
+5. **MCP Servers** — Optionally connect external tools (GitHub, Slack, databases)`
+  },
+  {
+    id: 'dashboard',
+    title: 'Dashboard',
+    icon: <LayoutDashboard size={18} />,
+    content: `# Dashboard
+
+The Dashboard is your home screen showing the health and status of your Claude Code setup.
+
+## Features
+- **CLI Status** — Shows whether Claude Code CLI is detected and its version
+- **Stat Cards** — Counts of your skills, agents, MCP servers, hooks, and commands
+- **Quick Actions** — One-click navigation to key sections
+- **Activity Feed** — Recent configuration changes and events
+
+## CLI Detection
+The app automatically checks for the Claude Code CLI on startup. If it's not found, you'll see a red "CLI Not Found" badge in the top bar. Install Claude Code CLI and restart the app.`
+  },
+  {
+    id: 'terminal',
+    title: 'Terminal',
+    icon: <Terminal size={18} />,
+    content: `# Terminal
+
+A full interactive Claude Code terminal with real PTY (pseudo-terminal) support.
+
+## Features
+- **Real PTY** — Full terminal emulation via node-pty and xterm.js, not a simple exec wrapper
+- **Model Selection** — Switch between Opus, Sonnet, and Haiku from the toolbar
+- **Session Tabs** — Run multiple concurrent Claude Code sessions
+- **Session Memory** — Create memory summaries to hand off context between sessions
+
+## Prompt Composer
+At the bottom of the terminal, the **Prompt Composer** helps beginners write better prompts:
+1. Type your prompt in the compose area
+2. Click **"Enhance with AI"** — Claude Haiku rewrites it to be clearer and more actionable
+3. Review the enhanced version (original shown for comparison)
+4. Click **"Send to Claude"** to send it to the active terminal session
+
+## Keyboard Shortcuts
+- **Cmd+Enter** — Send composed prompt
+- **Escape** — Close the composer
+- **Up/Down** — Navigate command history (in terminal)
+
+## Slash Commands
+Type directly in the terminal:
+- \`/help\` — Show available commands
+- \`/clear\` — Clear conversation
+- \`/compact\` — Compress conversation context
+- \`/memory\` — Save a memory note
+- \`/init\` — Generate a CLAUDE.md from your project`
+  },
+  {
+    id: 'claude-md',
+    title: 'CLAUDE.md Editor',
+    icon: <FileText size={18} />,
+    content: `# CLAUDE.md Editor
+
+Edit all levels of CLAUDE.md files with live preview and template support.
+
+## Four Tabs
+1. **Global** — \`~/.claude/CLAUDE.md\` — Applies to all projects
+2. **Project Root** — \`./CLAUDE.md\` — Project-specific, shared via git
+3. **Local** — \`.claude/CLAUDE.md\` — Project-specific, team-shared
+4. **Private** — \`./CLAUDE.local.md\` — Personal preferences, auto-gitignored
+
+## @Import Detection
+The editor automatically detects \`@path/to/file\` import references in your content and displays them as purple badges. Claude Code resolves these imports to include content from other files.
+
+## Templates
+Click the wand icon to choose from starter templates:
+- React + TypeScript
+- Python + FastAPI
+- Node.js + Express
+- Blank Template
+
+## Tips
+- Use **Global** for personal preferences that apply everywhere (e.g., coding style)
+- Use **Project Root** for team context (tech stack, conventions, commands)
+- Use **Private** for personal project notes you don't want committed to git
+- The \`/init\` command in the terminal can auto-generate a CLAUDE.md from your project`
+  },
+  {
+    id: 'memory',
+    title: 'Memory System',
+    icon: <Brain size={18} />,
+    content: `# Memory System
+
+Browse and manage Claude Code's built-in auto memory system.
+
+## Auto Memory
+Claude Code automatically maintains memory files at:
+\`~/.claude/projects/<project-path>/memory/\`
+
+- **MEMORY.md** — The entrypoint file. The first 200 lines are loaded into every session automatically.
+- **Topic Files** — Additional files (e.g., \`debugging.md\`, \`patterns.md\`) linked from MEMORY.md for deeper notes.
+
+## Memory Browser
+- View all projects that have auto memory directories
+- Expand projects to see their memory files in a tree view
+- Click any file to view and edit its contents
+- Create new topic files with the + button
+- Delete unused topic files
+
+## Memory Hierarchy (8 Levels)
+Claude Code loads context from multiple sources in priority order:
+1. Managed Policy (Enterprise) — Organization-wide settings
+2. User Global — \`~/.claude/CLAUDE.md\`
+3. User Rules — \`~/.claude/rules/*.md\`
+4. Project Root — \`./CLAUDE.md\` and \`.claude/CLAUDE.md\`
+5. Project Rules — \`.claude/rules/*.md\`
+6. Local Private — \`CLAUDE.local.md\` (auto-gitignored)
+7. Auto Memory — \`~/.claude/projects/.../memory/MEMORY.md\`
+8. Session — Conversation context within a session
+
+## Tips
+- Keep MEMORY.md under 200 lines — only the first 200 lines load per session
+- Use topic files for detailed notes and link them from MEMORY.md
+- Use \`/memory\` in the terminal to save quick memory notes
+- Use \`/remember\` to save specific learnings`
+  },
+  {
+    id: 'rules',
+    title: 'Rules Manager',
+    icon: <BookOpen size={18} />,
+    content: `# Rules Manager
+
+Create and manage \`.claude/rules/*.md\` files with optional path-scoped targeting.
+
+## What Are Rules?
+Rules are markdown files in \`.claude/rules/\` (project) or \`~/.claude/rules/\` (global) that provide additional instructions to Claude Code. They're loaded automatically based on file paths.
+
+## Path Scoping
+Rules can target specific files using YAML frontmatter:
+\`\`\`yaml
+---
+paths:
+  - "src/components/**/*.tsx"
+  - "src/hooks/*.ts"
+---
+# React Component Rules
+Always use functional components with hooks.
+\`\`\`
+Rules with path scopes only apply when Claude is working on matching files.
+
+## Features
+- **Global Rules** — \`~/.claude/rules/\` — Apply across all projects
+- **Project Rules** — \`.claude/rules/\` — Project-specific
+- **Scope Filter** — Filter rules by All / Global / Project
+- **Path Badges** — Visual indicators showing which file patterns a rule targets
+- **Create New** — Create rules with scope selection and optional path patterns
+
+## Tips
+- Use global rules for personal coding standards
+- Use project rules for team conventions
+- Path-scoped rules keep context focused and reduce noise`
+  },
+  {
+    id: 'settings',
+    title: 'Settings',
+    icon: <Settings size={18} />,
+    content: `# Settings
+
+Manage Claude Code settings at three scope levels.
+
+## Scopes
+1. **User** — \`~/.claude/settings.json\` — Your global defaults
+2. **Project** — \`.claude/settings.json\` — Team-shared project settings
+3. **Local** — \`.claude/settings.local.json\` — Private project overrides
+
+## Visual and JSON Modes
+Toggle between a visual form editor and raw JSON mode for full control.
+
+## Key Settings
+- **Model** — Default model (Opus 4.6, Sonnet 4.5, Haiku 4.5)
+- **Allowed Tools** — Whitelist specific tools Claude can use
+- **Denied Tools** — Blacklist tools you want to restrict
+- **Custom Instructions** — Additional behavioral instructions
+
+## How Scopes Merge
+Settings merge with narrower scopes overriding broader ones:
+User < Project < Local`
+  },
+  {
+    id: 'api-keys',
+    title: 'API Keys',
+    icon: <Key size={18} />,
+    content: `# API Keys
+
+Manage environment variables and API keys that Claude Code and MCP servers use.
+
+## Features
+- **Visual Key Manager** — Add, edit, and delete environment variables
+- **Preset Library** — 20+ common API key templates (Anthropic, OpenAI, GitHub, Brave, Supabase, etc.)
+- **Show/Hide Toggle** — Securely reveal or mask key values
+- **Copy to Clipboard** — Quick copy for use elsewhere
+
+## Security
+- Keys are stored in your environment configuration
+- Values are masked by default — click the eye icon to reveal
+- Never share or commit API keys to version control
+
+## Note
+If you have a Claude Max or Pro subscription, you don't need an ANTHROPIC_API_KEY. Run \`claude login\` in the terminal to authenticate with your subscription.`
+  },
+  {
+    id: 'skills',
+    title: 'Skills',
+    icon: <Zap size={18} />,
+    content: `# Skills
+
+Skills are reusable prompt patterns invoked with slash commands.
+
+## Structure
+\`\`\`
+~/.claude/skills/my-skill/
+  SKILL.md          # Instructions and frontmatter
+  scripts/          # Optional supporting scripts
+\`\`\`
+
+## Frontmatter Options
+- **name** — Skill identifier (used as /command-name)
+- **description** — When to use (for auto-matching)
+- **model** — Force specific model (opus/sonnet/haiku)
+- **allowed-tools** — Restrict available tools
+- **context** — Run in fork (subagent) or main context
+
+## Scope
+- **Global Skills** — \`~/.claude/skills/\` — Available in all projects
+- **Project Skills** — \`.claude/skills/\` — Project-specific
+
+## Usage
+Invoke with slash syntax in the terminal: \`/my-skill argument\``
+  },
+  {
+    id: 'agents',
+    title: 'Subagents',
+    icon: <Bot size={18} />,
+    content: `# Subagents
+
+Subagents are specialized AI personas with their own instructions and tool access.
+
+## Structure
+\`\`\`
+~/.claude/agents/my-agent.md    # Global agent
+.claude/agents/my-agent.md      # Project agent
+\`\`\`
+
+## Configuration
+- **name** — Used for @mention invocation
+- **model** — Which Claude model to use
+- **allowed-tools** — What tools the agent can access
+- **System prompt** — The agent's persona and instructions
+
+## Usage
+Invoke with @mention syntax: \`@code-reviewer check this function\`
+
+## Features in GUI
+- Browse global and project agents
+- Create new agents with a guided form
+- Edit agent instructions and configuration
+- Delete agents you no longer need`
+  },
+  {
+    id: 'commands',
+    title: 'Commands',
+    icon: <Command size={18} />,
+    content: `# Commands
+
+Custom slash commands that trigger specific prompts or actions.
+
+## Structure
+\`\`\`
+~/.claude/commands/my-command.md    # Global command
+.claude/commands/my-command.md      # Project command
+\`\`\`
+
+## How They Work
+Command files contain a prompt template. When you type \`/my-command\` in the terminal, Claude receives the contents of the command file as its instruction.
+
+## Features in GUI
+- Browse and search global and project commands
+- Create new commands with the editor
+- Preview command content before running
+- Delete unused commands`
+  },
+  {
+    id: 'hooks',
+    title: 'Hooks',
+    icon: <Webhook size={18} />,
+    content: `# Hooks
+
+Hooks execute custom commands in response to Claude Code events.
+
+## Event Types
+- **PreToolUse** — Before a tool runs (can block with exit code 2)
+- **PostToolUse** — After a tool completes
+- **UserPromptSubmit** — When user sends a message
+- **SessionStart** — When a session begins
+- **SessionEnd** — When a session ends (stop, finish, or interrupt)
+- **Notification** — When Claude needs input
+
+## Hook Types
+- **Command** — Run a shell command
+- **Prompt** — LLM evaluation (advanced)
+
+## Blocking Behavior
+Hooks that exit with code 2 will block the action (for Pre* events). This lets you create safety guards.
+
+## Configuration
+Hooks are stored in settings.json under the \`hooks\` key. The GUI provides a visual editor for creating and managing hooks.
+
+## Example Use Cases
+- Auto-format code before Claude writes files
+- Log all tool usage for auditing
+- Block certain operations in production directories
+- Send notifications when sessions complete`
+  },
+  {
+    id: 'mcp',
+    title: 'MCP Servers',
+    icon: <Server size={18} />,
+    content: `# MCP Servers
+
+MCP (Model Context Protocol) servers extend Claude with external tools and data sources.
+
+## Server Types
+- **Stdio** — Local process (npx, uvx, node, python, etc.)
+- **HTTP** — Remote server over HTTPS
+- **SSE** — Server-Sent Events (legacy)
+
+## Configuration Files
+- **User servers** — \`~/.claude.json\` (available in all projects)
+- **Project servers** — \`.mcp.json\` (project-specific)
+
+## Marketplace
+The built-in marketplace offers 30+ pre-configured MCP servers across categories:
+- **Official** — GitHub, Filesystem, Brave Search, Memory, PostgreSQL, Slack, Puppeteer
+- **Search & Web** — Tavily, Exa, Firecrawl
+- **Database** — SQLite, Redis, Supabase, MongoDB
+- **Communication** — Discord, Notion, Linear
+- **Development** — Docker, Sentry, Cloudflare
+- **AI & ML** — Replicate, Hugging Face, Stability AI
+
+## One-Click Install
+Select a server from the marketplace, fill in any required API keys, and install. The GUI writes the correct configuration to your \`~/.claude.json\` or \`.mcp.json\`.`
+  },
+  {
+    id: 'plugins',
+    title: 'Plugins',
+    icon: <Plug size={18} />,
+    content: `# Plugins
+
+The Plugins page provides discovery and management for MCP server plugins.
+
+## Features
+- Browse installed MCP servers from both user and project scopes
+- View server configuration details (command, args, environment)
+- Quick access to install new servers from the marketplace
+- Toggle servers between enabled and disabled states`
+  },
+  {
+    id: 'permissions',
+    title: 'Permissions',
+    icon: <Shield size={18} />,
+    content: `# Permissions & Security
+
+Control which tools Claude Code can use.
+
+## Tool Categories
+- **File Operations** — Read, Write, Edit, MultiEdit, Glob, Grep, NotebookEdit
+- **Execution** — Bash, Task (subagent spawning)
+- **Web** — WebFetch, WebSearch
+- **MCP** — mcp__* (all MCP server tools)
+
+## Allow / Deny Lists
+- **Allowed Tools** — Whitelist specific tools or patterns
+- **Denied Tools** — Blacklist tools you want to restrict
+- Patterns support wildcards (e.g., \`mcp__*\` for all MCP tools)
+
+## Scope
+Permissions are managed through settings.json and can be set at user, project, or local scope levels. Narrower scopes override broader ones.`
+  },
+  {
+    id: 'sessions',
+    title: 'Sessions',
+    icon: <History size={18} />,
+    content: `# Sessions
+
+Manage terminal sessions and session memory handoffs.
+
+## Active Sessions
+- View all running PTY (terminal) sessions
+- See session model, working directory, and uptime
+- Resume or terminate sessions
+
+## Session Memory
+Session memory lets you capture context from one session and carry it into the next:
+1. In the terminal, write a summary of your current work
+2. Save it as a session memory
+3. When starting a new session, the memory is available to restore context
+
+## Tips
+- Use session memory when switching between tasks
+- Keep summaries focused on what matters for the next session
+- Memory handoffs prevent losing context across terminal restarts`
+  },
+  {
+    id: 'projects',
+    title: 'Projects',
+    icon: <FolderOpen size={18} />,
+    content: `# Projects
+
+Open project directories and see their Claude Code configuration status.
+
+## Project Scanner
+When you open a project directory, the scanner checks for:
+- CLAUDE.md (project root)
+- .claude/CLAUDE.md (local config)
+- CLAUDE.local.md (private preferences)
+- .claude/settings.json and settings.local.json
+- .claude/skills/, agents/, commands/, rules/
+- .mcp.json (project MCP servers)
+- Auto memory directory
+
+## Scope Toggle
+Switch between **Project** and **Global** views:
+- **Project** — Shows configuration files in your current project
+- **Global** — Shows global configuration in \`~/.claude/\`
+
+## Quick Navigation
+Click any detected configuration item to jump directly to its editor page.`
+  },
+  {
+    id: 'shortcuts',
+    title: 'Keyboard Shortcuts',
+    icon: <Keyboard size={18} />,
+    content: `# Keyboard Shortcuts
+
+## Global
+- **Cmd/Ctrl + B** — Toggle sidebar
+
+## Terminal
+- **Enter** — Send message
+- **Shift + Enter** — New line
+- **Up/Down** — Command history
+- **Escape** — Interrupt current operation
+
+## Prompt Composer
+- **Cmd/Ctrl + Enter** — Send composed prompt
+- **Escape** — Close composer
+
+## Editors (CLAUDE.md, Rules, Memory)
+- **Tab** — Indent
+- **Cmd/Ctrl + Z** — Undo
+- **Cmd/Ctrl + Shift + Z** — Redo
+- **Cmd/Ctrl + S** — Save (when available)
+
+## Theme
+- Use the **sun/moon** toggle at the bottom of the sidebar to switch between light and dark mode`
+  },
+]
+
+export function DocsPage() {
+  const [selectedDoc, setSelectedDoc] = useState(DOCS[0].id)
+  const [search, setSearch] = useState('')
+
+  const filteredDocs = DOCS.filter(d =>
+    d.title.toLowerCase().includes(search.toLowerCase()) ||
+    d.content.toLowerCase().includes(search.toLowerCase())
+  )
+
+  const currentDoc = DOCS.find(d => d.id === selectedDoc)
+
+  // Simple inline code rendering
+  const renderInlineCode = (text: string) => {
+    const parts = text.split(/(`[^`]+`)/)
+    return parts.map((part, i) => {
+      if (part.startsWith('`') && part.endsWith('`')) {
+        return <code key={i} className="px-1.5 py-0.5 rounded bg-bg-tertiary text-accent-cyan text-[11px] font-mono">{part.slice(1, -1)}</code>
+      }
+      return <span key={i}>{part}</span>
+    })
+  }
+
+  return (
+    <div className="flex h-full">
+      {/* Docs sidebar */}
+      <div className="w-64 border-r border-border bg-bg-secondary overflow-y-auto flex-shrink-0">
+        <div className="p-3">
+          <SearchInput value={search} onChange={setSearch} placeholder="Search docs..." />
+        </div>
+        <nav className="px-2 pb-4">
+          {filteredDocs.map((doc) => (
+            <button
+              key={doc.id}
+              onClick={() => setSelectedDoc(doc.id)}
+              className={cn(
+                'w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all',
+                selectedDoc === doc.id
+                  ? 'bg-accent-orange/10 text-accent-orange font-medium'
+                  : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
+              )}
+            >
+              {doc.icon}
+              <span className="truncate">{doc.title}</span>
+            </button>
+          ))}
+        </nav>
+      </div>
+
+      {/* Doc content */}
+      <div className="flex-1 overflow-y-auto p-8 max-w-3xl">
+        {currentDoc && (
+          <div className="prose prose-invert prose-sm max-w-none">
+            {currentDoc.content.split('\n').map((line, i) => {
+              if (line.startsWith('# ')) return <h1 key={i} className="text-xl font-heading font-bold mb-4">{line.slice(2)}</h1>
+              if (line.startsWith('## ')) return <h2 key={i} className="text-lg font-heading font-semibold mt-6 mb-3">{line.slice(3)}</h2>
+              if (line.startsWith('- **')) {
+                const match = line.match(/- \*\*(.+?)\*\*\s*[—-]\s*(.+)/)
+                if (match) return <div key={i} className="flex gap-2 py-1"><span className="font-mono text-accent-cyan text-xs font-semibold whitespace-nowrap">{match[1]}</span><span className="text-xs text-text-secondary">{renderInlineCode(match[2])}</span></div>
+                const simpleMatch = line.match(/- \*\*(.+?)\*\*(.*)/)
+                if (simpleMatch) return <div key={i} className="text-sm text-text-secondary py-0.5 pl-4"><strong className="text-text-primary">{simpleMatch[1]}</strong>{simpleMatch[2]}</div>
+              }
+              if (line.startsWith('- ')) return <div key={i} className="text-sm text-text-secondary py-0.5 pl-4">{renderInlineCode("- " + line.slice(2))}</div>
+              if (line.match(/^\d+\.\s/)) return <div key={i} className="text-sm text-text-secondary py-0.5 pl-4">{renderInlineCode(line)}</div>
+              if (line.startsWith('```')) return null
+              if (line.trim() === '') return <div key={i} className="h-2" />
+              return <p key={i} className="text-sm text-text-secondary leading-relaxed">{renderInlineCode(line)}</p>
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}

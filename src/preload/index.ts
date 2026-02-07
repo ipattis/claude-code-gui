@@ -11,6 +11,9 @@ const api = {
     listSessions: () => ipcRenderer.invoke('cli:list-sessions'),
     killSession: (id: string) => ipcRenderer.invoke('cli:kill-session', id),
     getInfo: () => ipcRenderer.invoke('cli:get-info'),
+    enhancePrompt: (prompt: string) => ipcRenderer.invoke('cli:enhance-prompt', prompt),
+    summarizeSession: (transcript: string) => ipcRenderer.invoke('cli:summarize-session', transcript),
+    runScript: (filePath: string, cwd?: string) => ipcRenderer.invoke('cli:run-script', filePath, cwd),
   },
 
   // File System

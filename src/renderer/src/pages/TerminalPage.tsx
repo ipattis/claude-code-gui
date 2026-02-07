@@ -312,26 +312,10 @@ export function TerminalPage() {
     }
 
     try {
-      const result = await api.cli.exec({
-        command: `You are creating a session handoff summary. A developer is transitioning from one AI coding session to another. Create a concise summary that lets a fresh AI assistant pick up where the previous session left off.
-
-Focus on:
-- **Project context**: What project, what stack, what directory
-- **What was accomplished**: Key changes made, files modified
-- **Current state**: What's working, what's broken, what's in progress
-- **Key decisions**: Important architectural or implementation decisions and why
-- **Next steps**: What needs to be done next
-
-Be concise (under 400 words). Use markdown bullets.
-
-Terminal transcript:
----
-${transcript}
----`,
-        model: 'haiku',
-        timeout: 60000,
-      })
-      setMemorySummary(result.stdout || 'Failed to generate summary. You can write one manually.')
+      const result = await api.cli.summarizeSession(transcript)
+      setMemorySummary(result.success && result.summary
+        ? result.summary
+        : 'Failed to generate summary. You can write one manually.')
     } catch {
       setMemorySummary('Failed to generate summary. You can write one manually.')
     }
@@ -364,32 +348,14 @@ ${transcript}
 
     setEnhancing(true)
     try {
-      const result = await api.cli.exec({
-        command: `You are a prompt enhancement expert for Claude Code (an AI coding assistant). A beginner developer has written the following prompt. Rewrite it to be clear, specific, and well-structured so Claude Code can execute it effectively.
-
-Rules:
-- Preserve the user's EXACT intent — don't add features they didn't ask for
-- Make it specific and actionable
-- Add structure (bullet points, clear sections) if the request has multiple parts
-- Specify file paths, technologies, or constraints if they can be inferred
-- Keep it concise — better prompts are clear, not long
-- If the prompt is already good, make minimal improvements
-- Output ONLY the enhanced prompt, nothing else — no preamble, no explanation
-
-User's prompt:
----
-${promptText.trim()}
----`,
-        model: 'haiku',
-        timeout: 30000,
-      })
-      const enhanced = (result.stdout || '').trim()
-      if (enhanced) {
-        setEnhancedText(enhanced)
+      const result = await api.cli.enhancePrompt(promptText.trim())
+      if (result.success && result.enhanced) {
+        setEnhancedText(result.enhanced)
         setIsEnhanced(true)
+      } else {
+        addActivity({ type: 'session', message: result.error || 'Prompt enhancement failed', status: 'error' })
       }
     } catch {
-      // If enhancement fails, just keep the original
       addActivity({ type: 'session', message: 'Prompt enhancement failed', status: 'error' })
     }
     setEnhancing(false)

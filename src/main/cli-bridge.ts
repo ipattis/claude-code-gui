@@ -2,7 +2,8 @@ import { IpcMain, BrowserWindow } from 'electron'
 import { spawn, ChildProcess, execSync } from 'child_process'
 import { homedir } from 'os'
 import { join } from 'path'
-import { existsSync } from 'fs'
+import { existsSync, readFileSync } from 'fs'
+import { net } from 'electron'
 
 interface ClaudeSession {
   id: string
@@ -16,6 +17,29 @@ interface ClaudeSession {
 const sessions = new Map<string, ClaudeSession>()
 let sessionCounter = 0
 
+// Cached login shell PATH (expensive to compute — do it once)
+let _cachedLoginPath: string | null = null
+
+// Get the user's actual login shell PATH by spawning a login shell
+function getLoginShellPath(): string {
+  if (_cachedLoginPath !== null) return _cachedLoginPath
+
+  try {
+    const shell = process.env.SHELL || '/bin/zsh'
+    const result = execSync(`${shell} -ilc 'echo $PATH'`, {
+      encoding: 'utf-8',
+      timeout: 5000,
+    }).trim()
+    if (result) {
+      _cachedLoginPath = result
+      return result
+    }
+  } catch { /* ignore — fall back to manual construction */ }
+
+  _cachedLoginPath = ''
+  return ''
+}
+
 // Build a rich PATH that includes common user binary locations
 // Electron doesn't inherit the user's login shell PATH
 function buildUserPath(): string {
@@ -24,7 +48,6 @@ function buildUserPath(): string {
     join(home, '.npm-global', 'bin'),
     join(home, '.local', 'bin'),
     join(home, '.bun', 'bin'),
-    join(home, '.nvm', 'versions', 'node'),  // will be expanded below
     '/usr/local/bin',
     '/opt/homebrew/bin',
     join(home, '.cargo', 'bin'),
@@ -36,15 +59,17 @@ function buildUserPath(): string {
     try {
       const versions = require('fs').readdirSync(nvmDir)
       if (versions.length > 0) {
-        // Use the latest version
         const latest = versions.sort().reverse()[0]
         extraPaths.push(join(nvmDir, latest, 'bin'))
       }
     } catch { /* ignore */ }
   }
 
+  // Get the user's actual login shell PATH (most reliable in packaged app)
+  const loginPath = getLoginShellPath()
+
   const systemPath = process.env.PATH || '/usr/bin:/bin'
-  return [...extraPaths, systemPath].join(':')
+  return [...extraPaths, loginPath, systemPath].filter(Boolean).join(':')
 }
 
 function getClaudePath(): string {
@@ -87,6 +112,36 @@ function getSpawnEnv(): NodeJS.ProcessEnv {
 
 function generateSessionId(): string {
   return `session-${++sessionCounter}-${Date.now()}`
+}
+
+// Read API key from environment or ~/.claude/.env file
+function getAnthropicApiKey(): string | null {
+  // 1. Check process env (set by shell or system)
+  if (process.env.ANTHROPIC_API_KEY) {
+    return process.env.ANTHROPIC_API_KEY
+  }
+
+  // 2. Read from ~/.claude/.env
+  try {
+    const envPath = join(homedir(), '.claude', '.env')
+    if (existsSync(envPath)) {
+      const content = readFileSync(envPath, 'utf-8')
+      for (const line of content.split('\n')) {
+        const trimmed = line.trim()
+        if (!trimmed || trimmed.startsWith('#')) continue
+        const eqIdx = trimmed.indexOf('=')
+        if (eqIdx === -1) continue
+        const key = trimmed.slice(0, eqIdx).trim()
+        let value = trimmed.slice(eqIdx + 1).trim()
+        if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+          value = value.slice(1, -1)
+        }
+        if (key === 'ANTHROPIC_API_KEY' && value) return value
+      }
+    }
+  } catch { /* ignore */ }
+
+  return null
 }
 
 export function registerCliBridgeHandlers(ipcMain: IpcMain): void {
@@ -271,6 +326,218 @@ export function registerCliBridgeHandlers(ipcMain: IpcMain): void {
     }
     sessions.delete(sessionId)
     return { success: true }
+  })
+
+  // ── Direct Anthropic API call for prompt enhancement ──
+  // Much faster than spawning the full CLI (2-3s vs 15-30s)
+  ipcMain.handle('cli:enhance-prompt', async (_event, prompt: string) => {
+    const apiKey = getAnthropicApiKey()
+
+    if (apiKey) {
+      // Direct API call — fast path
+      try {
+        const response = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
+          },
+          body: JSON.stringify({
+            model: 'claude-haiku-4-5-20251001',
+            max_tokens: 1024,
+            messages: [{
+              role: 'user',
+              content: `You are a prompt enhancement expert for Claude Code (an AI coding assistant). A beginner developer has written the following prompt. Rewrite it to be clear, specific, and well-structured so Claude Code can execute it effectively.
+
+Rules:
+- Preserve the user's EXACT intent — don't add features they didn't ask for
+- Make it specific and actionable
+- Add structure (bullet points, clear sections) if the request has multiple parts
+- Specify file paths, technologies, or constraints if they can be inferred
+- Keep it concise — better prompts are clear, not long
+- If the prompt is already good, make minimal improvements
+- Output ONLY the enhanced prompt, nothing else — no preamble, no explanation
+
+User's prompt:
+---
+${prompt}
+---`
+            }]
+          }),
+        })
+
+        if (response.ok) {
+          const data = await response.json() as any
+          const text = data.content?.[0]?.text || ''
+          if (text) {
+            return { success: true, enhanced: text.trim() }
+          }
+        }
+        // If API call fails, fall through to CLI fallback
+        console.log('[enhance-prompt] API returned non-ok:', response.status)
+      } catch (e: any) {
+        console.log('[enhance-prompt] Direct API failed, falling back to CLI:', e.message)
+      }
+    }
+
+    // CLI fallback — slower but works with claude login (Max/Pro subscriptions)
+    try {
+      const result = await new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve) => {
+        const args = ['-p', `Rewrite this prompt to be clearer and more specific for an AI coding assistant. Output ONLY the enhanced prompt, nothing else:\n\n${prompt}`, '--output-format', 'text', '--model', 'haiku']
+        const proc = spawn(claudePath, args, {
+          cwd: process.cwd(),
+          env: getSpawnEnv(),
+        })
+        proc.stdin?.end()
+
+        let stdout = ''
+        let stderr = ''
+        const timer = setTimeout(() => { proc.kill('SIGTERM'); resolve({ code: -1, stdout, stderr: 'Timeout' }) }, 30000)
+
+        proc.stdout?.on('data', (d) => { stdout += d.toString() })
+        proc.stderr?.on('data', (d) => { stderr += d.toString() })
+        proc.on('close', (code) => { clearTimeout(timer); resolve({ code, stdout, stderr }) })
+        proc.on('error', (e) => { clearTimeout(timer); resolve({ code: -1, stdout: '', stderr: e.message }) })
+      })
+
+      if (result.stdout.trim()) {
+        return { success: true, enhanced: result.stdout.trim() }
+      }
+      return { success: false, error: result.stderr || 'No output from CLI' }
+    } catch (e: any) {
+      return { success: false, error: e.message }
+    }
+  })
+
+  // ── Execute a script file ──
+  ipcMain.handle('cli:run-script', async (_event, filePath: string, cwd?: string) => {
+    const ext = filePath.split('.').pop()?.toLowerCase()
+    let command: string
+    let args: string[]
+
+    switch (ext) {
+      case 'py':
+        command = 'python3'
+        args = [filePath]
+        break
+      case 'js':
+        command = 'node'
+        args = [filePath]
+        break
+      case 'ts':
+        command = 'npx'
+        args = ['tsx', filePath]
+        break
+      case 'sh':
+      case 'bash':
+        command = 'bash'
+        args = [filePath]
+        break
+      default:
+        return { success: false, output: `Unsupported file type: .${ext}` }
+    }
+
+    return new Promise((resolve) => {
+      const proc = spawn(command, args, {
+        cwd: cwd || process.cwd(),
+        env: getSpawnEnv(),
+      })
+
+      let output = ''
+      const timer = setTimeout(() => {
+        proc.kill('SIGTERM')
+        resolve({ success: false, output: output + '\n[Timeout after 60 seconds]' })
+      }, 60000)
+
+      proc.stdout?.on('data', (d) => { output += d.toString() })
+      proc.stderr?.on('data', (d) => { output += d.toString() })
+      proc.on('close', (code) => {
+        clearTimeout(timer)
+        resolve({ success: code === 0, output, exitCode: code })
+      })
+      proc.on('error', (e) => {
+        clearTimeout(timer)
+        resolve({ success: false, output: `Failed to run: ${e.message}` })
+      })
+    })
+  })
+
+  // ── Direct API call for session summarization ──
+  // Same fast-path strategy as enhance-prompt
+  ipcMain.handle('cli:summarize-session', async (_event, transcript: string) => {
+    const systemPrompt = `You are creating a session handoff summary. A developer is transitioning from one AI coding session to another. Create a concise summary that lets a fresh AI assistant pick up where the previous session left off.
+
+Focus on:
+- **Project context**: What project, what stack, what directory
+- **What was accomplished**: Key changes made, files modified
+- **Current state**: What's working, what's broken, what's in progress
+- **Key decisions**: Important architectural or implementation decisions and why
+- **Next steps**: What needs to be done next
+
+Be concise (under 400 words). Use markdown bullets.
+
+Terminal transcript:
+---
+${transcript}
+---`
+
+    const apiKey = getAnthropicApiKey()
+
+    if (apiKey) {
+      try {
+        const response = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
+          },
+          body: JSON.stringify({
+            model: 'claude-haiku-4-5-20251001',
+            max_tokens: 1024,
+            messages: [{ role: 'user', content: systemPrompt }]
+          }),
+        })
+
+        if (response.ok) {
+          const data = await response.json() as any
+          const text = data.content?.[0]?.text || ''
+          if (text) return { success: true, summary: text.trim() }
+        }
+        console.log('[summarize-session] API returned non-ok:', response.status)
+      } catch (e: any) {
+        console.log('[summarize-session] Direct API failed, falling back to CLI:', e.message)
+      }
+    }
+
+    // CLI fallback
+    try {
+      const result = await new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve) => {
+        const args = ['-p', systemPrompt, '--output-format', 'text', '--model', 'haiku']
+        const proc = spawn(claudePath, args, {
+          cwd: process.cwd(),
+          env: getSpawnEnv(),
+        })
+        proc.stdin?.end()
+
+        let stdout = ''
+        let stderr = ''
+        const timer = setTimeout(() => { proc.kill('SIGTERM'); resolve({ code: -1, stdout, stderr: 'Timeout' }) }, 60000)
+
+        proc.stdout?.on('data', (d) => { stdout += d.toString() })
+        proc.stderr?.on('data', (d) => { stderr += d.toString() })
+        proc.on('close', (code) => { clearTimeout(timer); resolve({ code, stdout, stderr }) })
+        proc.on('error', (e) => { clearTimeout(timer); resolve({ code: -1, stdout: '', stderr: e.message }) })
+      })
+
+      if (result.stdout.trim()) {
+        return { success: true, summary: result.stdout.trim() }
+      }
+      return { success: false, error: result.stderr || 'No output' }
+    } catch (e: any) {
+      return { success: false, error: e.message }
+    }
   })
 
   // Get Claude config info

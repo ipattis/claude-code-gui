@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react'
 import {
   Plus, X, Monitor, ChevronDown, RotateCcw, Terminal as TermIcon,
-  Brain, Loader2, Sparkles, Send, ChevronUp, Minimize2
+  Brain, Loader2, Sparkles, Send, ChevronUp, Minimize2, FolderOpen, Clock
 } from 'lucide-react'
 import { Terminal } from 'xterm'
 import { FitAddon } from 'xterm-addon-fit'
@@ -66,7 +66,7 @@ function extractBufferText(terminal: Terminal): string {
 }
 
 export function TerminalPage() {
-  const { cliAvailable, currentProjectDir, pendingSessionMemory, setPendingSessionMemory, addActivity } = useAppStore()
+  const { cliAvailable, currentProjectDir, setCurrentProjectDir, pendingSessionMemory, setPendingSessionMemory, addActivity } = useAppStore()
   const [tabs, setTabs] = useState<TerminalTab[]>([])
   const [activeTabId, setActiveTabId] = useState<string | null>(null)
   const [selectedModel, setSelectedModel] = useState(() => localStorage.getItem('claude-gui-model') || 'opus')
@@ -487,6 +487,69 @@ export function TerminalPage() {
   const displayText = isEnhanced ? enhancedText : promptText
   const canSend = activeTab && !activeTab.dead && activeTab.ptyId && displayText.trim()
 
+  // Open folder picker for project selection
+  const pickProject = useCallback(async () => {
+    const api = getApi()
+    if (!api) return
+    const dir = await api.fs.pickDirectory()
+    if (dir) {
+      setCurrentProjectDir(dir)
+      addActivity({ type: 'session', message: `Set project directory: ${dir}`, status: 'success' })
+    }
+  }, [setCurrentProjectDir, addActivity])
+
+  // Load recent projects from localStorage
+  const recentProjects: string[] = (() => {
+    try { return JSON.parse(localStorage.getItem('recentProjects') || '[]') } catch { return [] }
+  })()
+
+  // Gate: must select a project directory before using the terminal
+  if (!currentProjectDir) {
+    return (
+      <div className="flex flex-col h-full bg-[#0a0a0f] items-center justify-center">
+        <div className="max-w-md w-full space-y-6 px-6">
+          <div className="text-center space-y-2">
+            <TermIcon size={40} className="mx-auto text-accent-orange opacity-80" />
+            <h2 className="text-lg font-semibold text-text-primary">Select a Project Directory</h2>
+            <p className="text-sm text-text-muted">
+              Claude needs a working directory to operate in. Choose the project folder where you want Claude to read, write, and execute files.
+            </p>
+          </div>
+
+          <button
+            onClick={pickProject}
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg text-sm font-medium bg-accent-orange text-white hover:bg-accent-orange/90 transition-colors"
+          >
+            <FolderOpen size={18} />
+            Open Project Folder
+          </button>
+
+          {recentProjects.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-xs text-text-muted">
+                <Clock size={12} />
+                Recent Projects
+              </div>
+              {recentProjects.slice(0, 5).map((dir) => (
+                <button
+                  key={dir}
+                  onClick={() => {
+                    setCurrentProjectDir(dir)
+                    addActivity({ type: 'session', message: `Set project directory: ${dir}`, status: 'success' })
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-left text-xs font-mono bg-bg-secondary hover:bg-bg-tertiary border border-border/50 hover:border-border transition-colors truncate"
+                >
+                  <FolderOpen size={13} className="text-text-muted flex-shrink-0" />
+                  <span className="truncate">{dir}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col h-full bg-[#0a0a0f]">
       {/* Toolbar */}
@@ -521,11 +584,16 @@ export function TerminalPage() {
             )}
           </div>
 
-          {/* Current project directory indicator */}
+          {/* Current project directory indicator — click to change */}
           {currentProjectDir && (
-            <div className="text-[10px] text-text-muted font-mono truncate max-w-[200px]" title={currentProjectDir}>
+            <button
+              onClick={pickProject}
+              className="flex items-center gap-1 text-[10px] text-text-muted font-mono truncate max-w-[200px] hover:text-text-secondary transition-colors"
+              title={`${currentProjectDir}\nClick to change project`}
+            >
+              <FolderOpen size={11} className="flex-shrink-0" />
               {currentProjectDir.split('/').pop()}
-            </div>
+            </button>
           )}
 
           <div className="w-px h-5 bg-border mx-1" />

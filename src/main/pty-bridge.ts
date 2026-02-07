@@ -112,7 +112,7 @@ export function registerPtyHandlers(ipcMain: IpcMain): void {
     shell?: boolean
   }) => {
     const id = `pty-${++counter}-${Date.now()}`
-    const cwd = options.cwd || process.cwd()
+    const cwd = options.cwd || homedir()
 
     const env = {
       ...process.env,

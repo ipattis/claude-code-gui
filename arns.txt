@@ -1,0 +1,3 @@
+arn:aws:secretsmanager:us-east-1:891540071994:secret:ClaudeGUI/CognitoUserPoolId-pQxJv5
+arn:aws:secretsmanager:us-east-1:891540071994:secret:ClaudeGUI/CognitoClientId-igPdoS
+arn:aws:secretsmanager:us-east-1:891540071994:secret:ClaudeGUI/AnthropicApiKey-ID3Uy2

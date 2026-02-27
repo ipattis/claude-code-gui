@@ -1,0 +1,23 @@
+version: 1.0
+runtime: nodejs20
+
+# The build block is used if you switch App Runner from 'Image' to 'Source Code' repository deployment.
+build:
+  commands:
+    build:
+      - npm install
+      - npm run build:frontend
+      - npm run build:backend
+
+run:
+  command: npm start
+  network:
+    port: 8080
+    env: PORT
+  secrets:
+    - name: COGNITO_USER_POOL_ID
+      value: "arn:aws:secretsmanager:us-east-1:891540071994:secret:ClaudeGUI/CognitoUserPoolId-pQxJv5"
+    - name: COGNITO_CLIENT_ID
+      value: "arn:aws:secretsmanager:us-east-1:891540071994:secret:ClaudeGUI/CognitoClientId-igPdoS"
+    - name: ANTHROPIC_API_KEY
+      value: "arn:aws:secretsmanager:us-east-1:891540071994:secret:ClaudeGUI/AnthropicApiKey-ID3Uy2"

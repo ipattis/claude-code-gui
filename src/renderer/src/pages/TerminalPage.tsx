@@ -47,9 +47,9 @@ const THEME = {
 }
 
 const MODELS = [
-  { id: 'opus', label: 'Claude Opus 4.6', desc: 'Most capable' },
-  { id: 'sonnet', label: 'Claude Sonnet 4.5', desc: 'Balanced' },
-  { id: 'haiku', label: 'Claude Haiku 4.5', desc: 'Fastest' },
+  { id: 'bedrock/anthropic.claude-3-opus-20240229-v1:0', label: 'Bedrock Claude 3 Opus', desc: 'Most capable' },
+  { id: 'bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0', label: 'Bedrock Claude 3.5 Sonnet', desc: 'Balanced' },
+  { id: 'bedrock/anthropic.claude-3-5-haiku-20241022-v1:0', label: 'Bedrock Claude 3.5 Haiku', desc: 'Fastest' },
 ]
 
 function extractBufferText(terminal: Terminal): string {
@@ -69,7 +69,7 @@ export function TerminalPage() {
   const { cliAvailable, currentProjectDir, setCurrentProjectDir, pendingSessionMemory, setPendingSessionMemory, addActivity } = useAppStore()
   const [tabs, setTabs] = useState<TerminalTab[]>([])
   const [activeTabId, setActiveTabId] = useState<string | null>(null)
-  const [selectedModel, setSelectedModel] = useState(() => localStorage.getItem('claude-gui-model') || 'opus')
+  const [selectedModel, setSelectedModel] = useState(() => localStorage.getItem('claude-gui-model') || 'bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0')
   const [showModelPicker, setShowModelPicker] = useState(false)
 
   // Save Memory modal state

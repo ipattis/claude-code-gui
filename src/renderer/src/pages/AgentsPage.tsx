@@ -35,7 +35,7 @@ export function AgentsPage() {
   const [wizardStep, setWizardStep] = useState(0)
   const [agentName, setAgentName] = useState('')
   const [agentDesc, setAgentDesc] = useState('')
-  const [agentModel, setAgentModel] = useState('sonnet')
+  const [agentModel, setAgentModel] = useState('bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0')
   const [agentScope, setAgentScope] = useState<'user' | 'project'>('user')
   const [agentAllowedTools, setAgentAllowedTools] = useState('')
   const [agentDenyTools, setAgentDenyTools] = useState('')
@@ -62,7 +62,7 @@ export function AgentsPage() {
     setWizardStep(0)
     setAgentName('')
     setAgentDesc('')
-    setAgentModel('sonnet')
+    setAgentModel('bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0')
     setAgentScope('user')
     setAgentAllowedTools('')
     setAgentDenyTools('')
@@ -206,9 +206,9 @@ export function AgentsPage() {
                   <div>
                     <label className="label">Model</label>
                     <select value={agentModel} onChange={(e) => setAgentModel(e.target.value)} className="input">
-                      <option value="opus">Opus (most capable)</option>
-                      <option value="sonnet">Sonnet (balanced)</option>
-                      <option value="haiku">Haiku (fastest)</option>
+                      <option value="bedrock/anthropic.claude-3-opus-20240229-v1:0">Opus (most capable)</option>
+                      <option value="bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0">Sonnet (balanced)</option>
+                      <option value="bedrock/anthropic.claude-3-5-haiku-20241022-v1:0">Haiku (fastest)</option>
                     </select>
                   </div>
                   <div>
@@ -259,7 +259,7 @@ export function AgentsPage() {
                       if (agentDenyTools) fm.deny = agentDenyTools
                       return buildFrontmatter(fm) + agentPrompt
                     })()}
-                    onChange={() => {}}
+                    onChange={() => { }}
                     readOnly
                     language="markdown"
                     minHeight="300px"
